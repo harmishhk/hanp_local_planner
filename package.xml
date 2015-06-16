@@ -20,6 +20,8 @@
   <build_depend>dynamic_reconfigure</build_depend>
   <build_depend>nav_core</build_depend>
   <build_depend>nav_msgs</build_depend>
+  <build_depend>pluginlib</build_depend>
+  <build_depend>pcl_conversions</build_depend>
   <build_depend>roscpp</build_depend>
   <build_depend>tf</build_depend>
 
@@ -28,6 +30,8 @@
   <run_depend>dynamic_reconfigure</run_depend>
   <run_depend>nav_core</run_depend>
   <run_depend>nav_msgs</run_depend>
+  <run_depend>pluginlib</run_depend>
+  <run_depend>pcl_conversions</run_depend>
   <run_depend>roscpp</run_depend>
   <run_depend>tf</run_depend>
 
@@ -38,7 +42,6 @@
   <!--  <replace>some_pkg</replace>  -->
 
   <export>
-    <!-- <metapackage/> -->
-
+    <nav_core plugin="${prefix}/hanp_blp_plugin.xml" />
   </export>
 </package>

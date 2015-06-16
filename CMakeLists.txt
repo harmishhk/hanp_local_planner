@@ -21,12 +21,14 @@ find_package(catkin REQUIRED COMPONENTS
   dynamic_reconfigure
   nav_core
   nav_msgs
+  pluginlib
+  pcl_conversions
   roscpp
   tf
 )
 
-# find_package(Boost REQUIRED COMPONENTS system)
-
+find_package(Eigen3 REQUIRED)
+find_package(PCL REQUIRED)
 
 ## install python modules and global scripts
 # catkin_python_setup()
@@ -54,25 +56,27 @@ find_package(catkin REQUIRED COMPONENTS
 #   nav_msgs
 # )
 
-## add dynamic reconfigure configs
-# generate_dynamic_reconfigure_options( DIRECTORY cfg
-#   DynReconf1.cfg
-# )
+# add dynamic reconfigure configs
+generate_dynamic_reconfigure_options(
+  cfg/HANPLocalPlanner.cfg
+)
 
 ## declare catkin package
 catkin_package(
-#   INCLUDE_DIRS
-#     include
-#   LIBRARIES
-#     hanp_local_planner
-#   CATKIN_DEPENDS
-#     base_local_planner
-#     costmap_2d
-#     dynamic_reconfigure
-#     nav_core
-#     nav_msgs
-#     roscpp
-#     tf
+  INCLUDE_DIRS
+    include
+  LIBRARIES
+    hanp_local_planner
+  CATKIN_DEPENDS
+    base_local_planner
+    costmap_2d
+    dynamic_reconfigure
+    nav_core
+    nav_msgs
+    pluginlib
+    pcl_conversions
+    roscpp
+    tf
 #   DEPENDS
 #     system_lib
 )
@@ -81,35 +85,24 @@ catkin_package(
 
 ## build ##
 
-# include_directories(include)
 include_directories(
+  include
   ${catkin_INCLUDE_DIRS}
+  ${EIGEN_INCLUDE_DIRS}
+  ${PCL_INCLUDE_DIRS}
+)
+add_definitions(${EIGEN_DEFINITIONS})
+
+# declare a c++ library
+add_library(hanp_local_planner
+  src/hanp_local_planner.cpp
 )
 
-## declare a c++ library
-# add_library(hanp_local_planner
-#   src/${PROJECT_NAME}/hanp_local_planner.cpp
-# )
+# cmake target dependencies of the c++ library
+add_dependencies(hanp_local_planner ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
-## cmake target dependencies of the c++ library
-# add_dependencies(hanp_local_planner ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-
-## declare a c++ executable
-# add_executable(hanp_local_planner_node
-#   src/hanp_local_planner_node.cpp
-# )
-
-## cmake target dependencies of the c++ executable
-# add_dependencies(hanp_local_planner_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-
-
-## build configure headers
-# add_dependencies(hanp_local_planner_node ${PROJECT_NAME}_gencfg)
-
-## libraries to link a library or executable target against
-# target_link_libraries(hanp_local_planner_node
-#   ${catkin_LIBRARIES}
-# )
+# libraries to link the target c++ library against
+target_link_libraries(hanp_local_planner ${catkin_LIBRARIES})
 
 
 

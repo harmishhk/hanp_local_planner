@@ -1,0 +1,7 @@
+<library path="lib/libhanp_local_planner">
+    <class name="hanp_local_planner/HANPLocalPlanner" type="hanp_local_planner::HANPLocalPlanner" base_class_type="nav_core::BaseLocalPlanner">
+        <description>
+            an implementation of a human aware local planner
+        </description>
+    </class>
+</library>
