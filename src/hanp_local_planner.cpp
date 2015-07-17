@@ -91,6 +91,8 @@ namespace hanp_local_planner
         generator_.setParameters(config.sim_time, config.sim_granularity,
             config.angular_sim_granularity, config.use_dwa, sim_period_);
 
+        sim_time_ = config.sim_time;
+
         double resolution = planner_util_.getCostmap()->getResolution();
         pdist_scale_ = config.path_distance_bias;
         path_costs_->setScale(resolution * pdist_scale_ * 0.5);
@@ -150,6 +152,7 @@ namespace hanp_local_planner
             ros::NodeHandle private_nh("~/" + name);
             g_plan_pub_ = private_nh.advertise<nav_msgs::Path>("global_plan", 1);
             l_plan_pub_ = private_nh.advertise<nav_msgs::Path>("local_plan", 1);
+            point_head_pub_ = private_nh.advertise<geometry_msgs::PointStamped>("point_head", 1);
             tf_ = tf;
             costmap_ros_ = costmap_ros;
             costmap_ros_->getRobotPose(current_pose_);
@@ -289,6 +292,11 @@ namespace hanp_local_planner
         base_local_planner::publishPlan(path, g_plan_pub_);
     }
 
+    void HANPLocalPlanner::publishPointHead(geometry_msgs::PointStamped& point_head)
+    {
+        point_head_pub_.publish(point_head);
+    }
+
     HANPLocalPlanner::~HANPLocalPlanner()
     {
         delete dsrv_;
@@ -335,6 +343,15 @@ namespace hanp_local_planner
             ROS_DEBUG_NAMED("hanp_local_planner", "The hanp local planner failed to find a valid plan, cost functions discarded all candidates. This can mean there is an obstacle too close to the robot.");
             local_plan.clear();
             publishLocalPlan(local_plan);
+
+            // publish to point head in the front of the robot
+            geometry_msgs::PointStamped point_head;
+            point_head.header.stamp = ros::Time::now();
+            point_head.header.frame_id = costmap_ros_->getBaseFrameID();
+            point_head.point.x = 0.1;
+            point_head.point.y = 0.0;
+            point_head.point.z = 1.5; // TODO: make robot height as parameter
+            publishPointHead(point_head);
             return false;
         }
 
@@ -355,6 +372,15 @@ namespace hanp_local_planner
         }
 
         publishLocalPlan(local_plan);
+
+        // publish head pose
+        geometry_msgs::PointStamped point_head;
+        point_head.header.stamp = ros::Time::now();
+        point_head.header.frame_id = local_plan.back().header.frame_id;
+        point_head.point = local_plan.back().pose.position;
+        point_head.point.z = 1.5; // TODO: make robot height as parameter
+        publishPointHead(point_head);
+
         return true;
     }
 
@@ -387,6 +413,16 @@ namespace hanp_local_planner
             std::vector<geometry_msgs::PoseStamped> transformed_plan;
             publishGlobalPlan(transformed_plan);
             publishLocalPlan(local_plan);
+
+            // publish to point head in the front of the robot
+            geometry_msgs::PointStamped point_head;
+            point_head.header.stamp = ros::Time::now();
+            point_head.header.frame_id = costmap_ros_->getBaseFrameID();
+            point_head.point.x = 0.1;
+            point_head.point.y = 0.0;
+            point_head.point.z = 1.5; // TODO: make robot height as parameter
+            publishPointHead(point_head);
+
             base_local_planner::LocalPlannerLimits limits = planner_util_.getCurrentLimits();
             return latchedStopRotateController_.computeVelocityCommandsStopRotate(cmd_vel,
                 limits.getAccLimits(), sim_period_, &planner_util_, odom_helper_,

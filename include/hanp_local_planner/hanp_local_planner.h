@@ -104,6 +104,7 @@ namespace hanp_local_planner
 
         void reconfigureCB(HANPLocalPlannerConfig &config, uint32_t level);
 
+        void publishPointHead(geometry_msgs::PointStamped& point_head);
         void publishLocalPlan(std::vector<geometry_msgs::PoseStamped>& path);
         void publishGlobalPlan(std::vector<geometry_msgs::PoseStamped>& path);
 
@@ -120,7 +121,7 @@ namespace hanp_local_planner
         dynamic_reconfigure::Server<HANPLocalPlannerConfig> *dsrv_;
         hanp_local_planner::HANPLocalPlannerConfig default_config_;
 
-        ros::Publisher g_plan_pub_, l_plan_pub_;
+        ros::Publisher g_plan_pub_, l_plan_pub_, point_head_pub_;
         std::string odom_topic_;
 
         tf::Stamped<tf::Pose> current_pose_;
@@ -128,7 +129,7 @@ namespace hanp_local_planner
         double stop_time_buffer_;
         double pdist_scale_, gdist_scale_, occdist_scale_;
         Eigen::Vector3f vsamples_;
-        double sim_period_;
+        double sim_period_, sim_time_;
         double forward_point_distance_;
         std::vector<geometry_msgs::PoseStamped> global_plan_;
         boost::mutex configuration_mutex_;

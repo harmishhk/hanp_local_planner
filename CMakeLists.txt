@@ -20,6 +20,7 @@ find_package(catkin REQUIRED COMPONENTS
   base_local_planner
   costmap_2d
   dynamic_reconfigure
+  geometry_msgs
   nav_core
   nav_msgs
   pluginlib
@@ -72,6 +73,7 @@ catkin_package(
     base_local_planner
     costmap_2d
     dynamic_reconfigure
+    geometry_msgs
     nav_core
     nav_msgs
     pluginlib
