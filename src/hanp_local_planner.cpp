@@ -35,6 +35,8 @@
 * Author: Eitan Marder-Eppstein
 *********************************************************************/
 
+#define POINT_HEAD_HEGIHT 1.5 // meters
+
 #include <hanp_local_planner/hanp_local_planner.h>
 
 #include <cmath>
@@ -141,6 +143,8 @@ namespace hanp_local_planner
         vsamples_[0] = vx_samp;
         vsamples_[1] = vy_samp;
         vsamples_[2] = vth_samp;
+
+        point_head_height_ = config.point_head_height;
     }
 
     HANPLocalPlanner::HANPLocalPlanner() : initialized_(false), odom_helper_("odom"), setup_(false) { }
@@ -273,6 +277,15 @@ namespace hanp_local_planner
 
         if(latchedStopRotateController_.isGoalReached(&planner_util_, odom_helper_, current_pose_))
         {
+            // look at front of the robot when goal reached
+            geometry_msgs::PointStamped point_head;
+            point_head.header.stamp = ros::Time::now();
+            point_head.header.frame_id = "base_link";
+            point_head.point.x = 1.0;
+            point_head.point.y = 0.0;
+            point_head.point.z = point_head_height_;
+            publishPointHead(point_head);
+
             ROS_INFO("Goal reached");
             return true;
         }
@@ -294,6 +307,7 @@ namespace hanp_local_planner
 
     void HANPLocalPlanner::publishPointHead(geometry_msgs::PointStamped& point_head)
     {
+        ROS_DEBUG("heading point: x=%f, y=%f, frame=%s", point_head.point.x, point_head.point.y, point_head.header.frame_id.c_str());
         point_head_pub_.publish(point_head);
     }
 
@@ -344,13 +358,13 @@ namespace hanp_local_planner
             local_plan.clear();
             publishLocalPlan(local_plan);
 
-            // publish to point head in the front of the robot
+            // look in the front of the robot in case of failure
             geometry_msgs::PointStamped point_head;
             point_head.header.stamp = ros::Time::now();
-            point_head.header.frame_id = costmap_ros_->getBaseFrameID();
-            point_head.point.x = 0.1;
+            point_head.header.frame_id = "base_link";
+            point_head.point.x = 1.0;
             point_head.point.y = 0.0;
-            point_head.point.z = 1.5; // TODO: make robot height as parameter
+            point_head.point.z = point_head_height_;
             publishPointHead(point_head);
             return false;
         }
@@ -373,12 +387,16 @@ namespace hanp_local_planner
 
         publishLocalPlan(local_plan);
 
-        // publish head pose
+        // look at the end of the local plan
+        tf::Pose local_plan_end;
+        tf::poseMsgToTF(local_plan.back().pose, local_plan_end);
+        auto local_plan_end_extended = local_plan_end(tf::Vector3(0.5,0,0));
         geometry_msgs::PointStamped point_head;
         point_head.header.stamp = ros::Time::now();
         point_head.header.frame_id = local_plan.back().header.frame_id;
-        point_head.point = local_plan.back().pose.position;
-        point_head.point.z = 1.5; // TODO: make robot height as parameter
+        point_head.point.x = local_plan_end_extended.x();
+        point_head.point.y = local_plan_end_extended.y();
+        point_head.point.z = point_head_height_;
         publishPointHead(point_head);
 
         return true;
@@ -414,13 +432,16 @@ namespace hanp_local_planner
             publishGlobalPlan(transformed_plan);
             publishLocalPlan(local_plan);
 
-            // publish to point head in the front of the robot
+            // look at the final goal when position is reached
+            tf::Stamped<tf::Pose> goal_pose;
+            planner_util_.getGoal(goal_pose);
             geometry_msgs::PointStamped point_head;
             point_head.header.stamp = ros::Time::now();
-            point_head.header.frame_id = costmap_ros_->getBaseFrameID();
-            point_head.point.x = 0.1;
-            point_head.point.y = 0.0;
-            point_head.point.z = 1.5; // TODO: make robot height as parameter
+            point_head.header.frame_id = goal_pose.frame_id_;
+            auto goal_pose_front = goal_pose(tf::Vector3(1.0 , 0.0, 0.0));
+            point_head.point.x = goal_pose_front.x();
+            point_head.point.y = goal_pose_front.y();
+            point_head.point.z = point_head_height_;
             publishPointHead(point_head);
 
             base_local_planner::LocalPlannerLimits limits = planner_util_.getCurrentLimits();

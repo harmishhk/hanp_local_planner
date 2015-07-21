@@ -138,6 +138,7 @@ namespace hanp_local_planner
         bool publish_cost_grid_pc_;
         bool publish_traj_pc_;
         double cheat_factor_;
+        double point_head_height_;
 
         base_local_planner::LatchedStopRotateController latchedStopRotateController_;
         base_local_planner::OdometryHelperRos odom_helper_;
