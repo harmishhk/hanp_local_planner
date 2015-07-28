@@ -35,7 +35,12 @@
 * Author: Eitan Marder-Eppstein
 *********************************************************************/
 
+// dynamically reconfigurable parameters
 #define POINT_HEAD_HEGIHT 1.5 // meters
+
+// parameters configurable at start
+#define PLANNING_FRAME "odom"
+#define ROBOT_BASE_FRAME "base_link"
 
 #include <hanp_local_planner/hanp_local_planner.h>
 
@@ -231,11 +236,12 @@ namespace hanp_local_planner
 
             private_nh.param("cheat_factor", cheat_factor_, 1.0);
 
-
             if( private_nh.getParam( "odom_topic", odom_topic_ ))
             {
                 odom_helper_.setOdomTopic( odom_topic_ );
             }
+
+            private_nh.param("robot_base_frame", robot_base_frame_, std::string(ROBOT_BASE_FRAME));
 
             initialized_ = true;
 
@@ -283,7 +289,7 @@ namespace hanp_local_planner
             // look at front of the robot when goal reached
             geometry_msgs::PointStamped point_head;
             point_head.header.stamp = ros::Time::now();
-            point_head.header.frame_id = "base_link";
+            point_head.header.frame_id = robot_base_frame_;
             point_head.point.x = 1.0;
             point_head.point.y = 0.0;
             point_head.point.z = point_head_height_;
@@ -364,7 +370,7 @@ namespace hanp_local_planner
             // look in the front of the robot in case of failure
             geometry_msgs::PointStamped point_head;
             point_head.header.stamp = ros::Time::now();
-            point_head.header.frame_id = "base_link";
+            point_head.header.frame_id = robot_base_frame_;
             point_head.point.x = 1.0;
             point_head.point.y = 0.0;
             point_head.point.z = point_head_height_;

@@ -124,6 +124,7 @@ namespace hanp_local_planner
 
         ros::Publisher g_plan_pub_, l_plan_pub_, point_head_pub_;
         std::string odom_topic_;
+        std::string robot_base_frame_;
 
         tf::Stamped<tf::Pose> current_pose_;
 
