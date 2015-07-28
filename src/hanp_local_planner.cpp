@@ -114,6 +114,8 @@ namespace hanp_local_planner
         alignment_costs_->setXShift(forward_point_distance_);
         obstacle_costs_->setParams(config.max_trans_vel, config.max_scaling_factor, config.scaling_speed);
 
+        prefer_forward_costs_->setPenalty(config.backward_motion_penalty);
+
         int vx_samp, vy_samp, vth_samp;
         vx_samp = config.vx_samples;
         vy_samp = config.vy_samples;
@@ -165,12 +167,12 @@ namespace hanp_local_planner
 
             planner_util_.initialize(tf, costmap, costmap_ros_->getGlobalFrameID());
 
-
             obstacle_costs_ = new base_local_planner::ObstacleCostFunction(planner_util_.getCostmap());
             path_costs_ = new base_local_planner::MapGridCostFunction(planner_util_.getCostmap());
             goal_costs_ = new base_local_planner::MapGridCostFunction(planner_util_.getCostmap(), 0.0, 0.0, true);
             goal_front_costs_ = new base_local_planner::MapGridCostFunction(planner_util_.getCostmap(), 0.0, 0.0, true);
             alignment_costs_ = new base_local_planner::MapGridCostFunction(planner_util_.getCostmap());
+            prefer_forward_costs_ = new base_local_planner::PreferForwardCostFunction(0.0);
 
             goal_front_costs_->setStopOnFailure( false );
             alignment_costs_->setStopOnFailure( false );
@@ -220,6 +222,7 @@ namespace hanp_local_planner
             critics.push_back(alignment_costs_);
             critics.push_back(path_costs_);
             critics.push_back(goal_costs_);
+            critics.push_back(prefer_forward_costs_);
 
             std::vector<base_local_planner::TrajectorySampleGenerator*> generator_list;
             generator_list.push_back(&generator_);
