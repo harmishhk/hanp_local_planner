@@ -217,7 +217,7 @@ namespace hanp_local_planner
             obstacle_costs_->setSumScores(sum_scores);
 
             private_nh.param("publish_cost_grid_pc", publish_cost_grid_pc_, false);
-            map_viz_.initialize(name, planner_util_.getGlobalFrame(), boost::bind(&HANPLocalPlanner::getCellCosts, this, _1, _2, _3, _4, _5, _6));
+            map_viz_.initialize(name, planner_util_.getGlobalFrame(), boost::bind(&HANPLocalPlanner::getCellCosts, this, _1, _2, _3, _4, _5, _6, _7));
 
             std::string frame_id;
             private_nh.param("global_frame_id", frame_id, std::string(PLANNING_FRAME));
@@ -333,6 +333,10 @@ namespace hanp_local_planner
     HANPLocalPlanner::~HANPLocalPlanner()
     {
         delete dsrv_;
+        if(traj_cloud_)
+        {
+            delete traj_cloud_;
+        }
     }
 
    bool HANPLocalPlanner::hanpComputeVelocityCommands(tf::Stamped<tf::Pose> &global_pose, geometry_msgs::Twist& cmd_vel)
@@ -502,9 +506,10 @@ namespace hanp_local_planner
         }
     }
 
-    bool HANPLocalPlanner::getCellCosts(int cx, int cy, float &path_cost, float &goal_cost, float &occ_cost, float &total_cost)
+    bool HANPLocalPlanner::getCellCosts(int cx, int cy, float &path_cost, float &alignment_cost, float &goal_cost, float &occ_cost, float &total_cost)
     {
         path_cost = path_costs_->getCellCosts(cx, cy);
+        alignment_cost = alignment_costs_->getCellCosts(cx, cy);
         goal_cost = goal_costs_->getCellCosts(cx, cy);
         occ_cost = planner_util_.getCostmap()->getCost(cx, cy);
         if (path_cost == path_costs_->obstacleCosts() ||
@@ -516,6 +521,7 @@ namespace hanp_local_planner
 
         double resolution = planner_util_.getCostmap()->getResolution();
         total_cost = pdist_scale_ * resolution * path_cost +
+            pdist_scale_ * resolution * alignment_cost +
             gdist_scale_ * resolution * goal_cost + occdist_scale_ * occ_cost;
         return true;
     }

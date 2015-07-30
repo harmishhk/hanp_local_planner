@@ -112,7 +112,7 @@ namespace hanp_local_planner
         void publishLocalPlan(std::vector<geometry_msgs::PoseStamped>& path);
         void publishGlobalPlan(std::vector<geometry_msgs::PoseStamped>& path);
 
-        bool getCellCosts(int cx, int cy, float &path_cost, float &goal_cost, float &occ_cost, float &total_cost);
+        bool getCellCosts(int cx, int cy, float &path_cost, float &alignment_cost, float &goal_cost, float &occ_cost, float &total_cost);
         bool checkTrajectory(const Eigen::Vector3f pos, const Eigen::Vector3f vel, const Eigen::Vector3f vel_samples);
         void updatePlanAndLocalCosts(tf::Stamped<tf::Pose> global_pose, const std::vector<geometry_msgs::PoseStamped>& new_plan);
         base_local_planner::Trajectory findBestPath(tf::Stamped<tf::Pose> global_pose,
