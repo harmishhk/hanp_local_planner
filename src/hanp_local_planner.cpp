@@ -41,6 +41,7 @@
 // parameters configurable at start
 #define PLANNING_FRAME "odom"
 #define ROBOT_BASE_FRAME "base_link"
+#define HUMAN_SUB_TOPIC "humans"
 
 #include <hanp_local_planner/hanp_local_planner.h>
 
@@ -121,6 +122,9 @@ namespace hanp_local_planner
 
         prefer_forward_costs_->setPenalty(config.backward_motion_penalty);
 
+        // TODO: make params configurable
+        context_cost_function_->setParams(M_PI/2, 0.5, 5.0);
+
         int vx_samp, vy_samp, vth_samp;
         vx_samp = config.vx_samples;
         vy_samp = config.vy_samples;
@@ -177,7 +181,10 @@ namespace hanp_local_planner
             goal_costs_ = new base_local_planner::MapGridCostFunction(planner_util_.getCostmap(), 0.0, 0.0, true);
             goal_front_costs_ = new base_local_planner::MapGridCostFunction(planner_util_.getCostmap(), 0.0, 0.0, true);
             alignment_costs_ = new base_local_planner::MapGridCostFunction(planner_util_.getCostmap());
+
             prefer_forward_costs_ = new base_local_planner::PreferForwardCostFunction(0.0);
+
+            context_cost_function_ =  new hanp_local_planner::ContextCostFunction();
 
             goal_front_costs_->setStopOnFailure( false );
             alignment_costs_->setStopOnFailure( false );
@@ -242,6 +249,9 @@ namespace hanp_local_planner
             }
 
             private_nh.param("robot_base_frame", robot_base_frame_, std::string(ROBOT_BASE_FRAME));
+
+            // subscribe to humans position updates
+            humans_sub_ = private_nh.subscribe(HUMAN_SUB_TOPIC, 1, &HANPLocalPlanner::trackedHumansCB, this);
 
             initialized_ = true;
 
@@ -624,5 +634,10 @@ namespace hanp_local_planner
         }
 
         return result_traj_;
+    }
+
+    void HANPLocalPlanner::trackedHumansCB(const hanp_msgs::TrackedHumans& tracked_humans)
+    {
+        context_cost_function_->updateTrackedHumans(tracked_humans);
     }
 };

@@ -21,6 +21,7 @@ find_package(catkin REQUIRED COMPONENTS
   costmap_2d
   dynamic_reconfigure
   geometry_msgs
+  hanp_msgs
   nav_core
   nav_msgs
   pluginlib
@@ -74,6 +75,7 @@ catkin_package(
     costmap_2d
     dynamic_reconfigure
     geometry_msgs
+    hanp_msgs
     nav_core
     nav_msgs
     pluginlib
@@ -99,6 +101,7 @@ add_definitions(${EIGEN_DEFINITIONS})
 # declare a c++ library
 add_library(hanp_local_planner
   src/hanp_local_planner.cpp
+  src/context_cost_function.cpp
 )
 
 # cmake target dependencies of the c++ library

@@ -71,6 +71,9 @@
 #include <base_local_planner/obstacle_cost_function.h>
 #include <base_local_planner/prefer_forward_cost_function.h>
 #include <base_local_planner/simple_scored_sampling_planner.h>
+#include <hanp_msgs/TrackedHumans.h>
+
+#include <hanp_local_planner/context_cost_function.h>
 
 namespace hanp_local_planner
 {
@@ -116,6 +119,8 @@ namespace hanp_local_planner
             tf::Stamped<tf::Pose> global_vel, tf::Stamped<tf::Pose>& drive_velocities,
             std::vector<geometry_msgs::Point> footprint_spec);
 
+        void trackedHumansCB(const hanp_msgs::TrackedHumans& tracked_humans);
+
         costmap_2d::Costmap2DROS* costmap_ros_;
         tf::TransformListener* tf_;
 
@@ -142,6 +147,9 @@ namespace hanp_local_planner
         double cheat_factor_;
         double point_head_height_;
 
+        ros::Subscriber humans_sub_;
+        hanp_msgs::TrackedHumans tracked_humans_;
+
         base_local_planner::LatchedStopRotateController latchedStopRotateController_;
         base_local_planner::OdometryHelperRos odom_helper_;
         base_local_planner::LocalPlannerUtil planner_util_;
@@ -156,6 +164,8 @@ namespace hanp_local_planner
         base_local_planner::MapGridCostFunction* alignment_costs_;
         base_local_planner::PreferForwardCostFunction* prefer_forward_costs_;
         base_local_planner::SimpleScoredSamplingPlanner scored_sampling_planner_;
+
+        hanp_local_planner::ContextCostFunction* context_cost_function_;
     };
 };
 #endif
