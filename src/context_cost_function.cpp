@@ -29,12 +29,9 @@
 
 // context-cost related parameters
 #define ALPHA_MAX M_PI/2 // radians, angle between robot heading and inverse of human heading
-#define D_LOW 1.5// meters, minimum distance for compatibility measure
-#define D_MAX 10.0// meters, maximum distance for compatibility measure
-
-#ifndef DISTANCE2D
-    #define DISTANCE2D(x1,y1,x2,y2) (sqrt(((x2)-(x1))*((x2)-(x1))+((y2)-(y1))*((y2)-(y1))))
-#endif
+#define D_LOW 1.3// meters, minimum distance for compatibility measure
+#define D_HIGH 10.0// meters, maximum distance for compatibility measure
+#define PREDICT_TIME 3.0 // seconds, time for predicting human and robot position, before checking compatibility
 
 #include <hanp_local_planner/context_cost_function.h>
 
@@ -46,75 +43,53 @@ namespace hanp_local_planner
 
     bool ContextCostFunction::prepare()
     {
+        // set default parameters
+        setParams(ALPHA_MAX, D_LOW, D_HIGH, PREDICT_TIME);
+
         return true;
+    }
+
+    void ContextCostFunction::setParams(double alpha_max, double d_low, double d_high, double predict_time)
+    {
+        alpha_max_ = alpha_max;
+        d_low_ = d_low;
+        d_high_ = d_high;
+        predict_time_ = predict_time;
     }
 
     double ContextCostFunction::scoreTrajectory(base_local_planner::Trajectory &traj)
     {
+        // copy humans for thread safety
+        auto humans = humans_;
+
+        // TODO: predict robot position
+
+        // TODO: discard humans, if information is too old
+
+        for(auto human : humans.tracks)
+        {
+            // TODO: predict human position, for three speed possibilities
+
+            // TODO: calculate distance of robot to person
+            //  hypot(rx - hx, ry - hy);
+
+            // TODO: calculate compatibility and update overall value to lowest of all
+        }
+
         return 0.0;
     }
 
     void ContextCostFunction::updateTrackedHumans(const hanp_msgs::TrackedHumans& tracked_humans)
     {
-        return;
+        humans_ = tracked_humans;
     }
 
-    // void ContextCostFunction::checkCompatabilty(base_local_planner::Trajectory& trajectory, tf::Stamped<tf::Pose> global_pose,
-    //     tf::Stamped<tf::Pose> global_vel, tf::Stamped<tf::Pose>& drive_velocities)
-    // {
-    //     // get tracked humans pointer locally for thread safety
-    //     auto tracked_humans = tracked_humans_;
-    //
-    //     if(tracked_humans.tracks.size() > 0)
-    //     {
-    //         //transform human pose in global frame
-    //         int res;
-    //         try
-    //         {
-    //             std::string error_msg;
-    //             res = tf_->waitForTransform(global_pose.frame_id_, tracked_humans.header.frame_id,
-    //                 ros::Time(0), ros::Duration(0.5), ros::Duration(0.01), &error_msg);
-    //             tf::StampedTransform humans_to_global_transform;
-    //             tf_->lookupTransform(global_pose.frame_id_, tracked_humans.header.frame_id,
-    //                 ros::Time(0), humans_to_global_transform);
-    //             auto humans_to_global_translation = humans_to_global_transform.getOrigin();
-    //
-    //             for(auto tracked_human : tracked_humans.tracks)
-    //             {
-    //                 // find angle
-    //
-    //                 auto hx = tracked_human.pose.pose.position.x + humans_to_global_translation[0];
-    //                 auto hy = tracked_human.pose.pose.position.y + humans_to_global_translation[1];
-    //                 // tracked_human_transformed.pose.pose.position.z = tracked_human.pose.pose.position.z + humans_to_scan_translation[2];
-    //                 // do for orientation
-    //
-    //                 // check distance to the humans in TODO:forward direction
-    //                 //  stop if distance is below some value
-    //                 double dist = DISTANCE2D(global_pose.getOrigin().getX(), global_pose.getOrigin().getY(), hx, hy);
-    //                 ROS_INFO_NAMED("compatibility", "distance to human %lu is %f", tracked_human.track_id, dist);
-    //                 if(dist < D_LOW)
-    //                 {
-    //                     // TODO: empty the trajectory
-    //
-    //                     // stop the robot
-    //                     tf::Vector3 start(0, 0, 0);
-    //                     drive_velocities.setOrigin(start);
-    //                     tf::Matrix3x3 matrix;
-    //                     matrix.setRotation(tf::createQuaternionFromYaw(0));
-    //                     drive_velocities.setBasis(matrix);
-    //                     ROS_INFO_NAMED("compatibility", "reducing robot speed to 0");
-    //
-    //                     // starting from 0 check with SPEED_ADAPTATION_STEPS
-    //                     //  calculate conflict distance to human, for three speed possibilities
-    //                     //  if it is below 0, select the speed and return
-    //                 }
-    //             }
-    //         }
-    //         catch(const tf::TransformException &ex)
-    //         {
-    //             ROS_ERROR("transform failure (%d): %s", res, ex.what());
-    //         }
-    //     }
-    // }
+    double ContextCostFunction::getCompatabilty(double d_p, double alpha)
+    {
+        return 0.0;
+    }
+
+
+
 
 }

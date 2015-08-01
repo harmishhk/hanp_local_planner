@@ -33,6 +33,8 @@
 #include <base_local_planner/trajectory_cost_function.h>
 #include <hanp_msgs/TrackedHumans.h>
 
+#include <math.h>
+
 namespace hanp_local_planner {
 
     class ContextCostFunction: public base_local_planner::TrajectoryCostFunction
@@ -46,15 +48,15 @@ namespace hanp_local_planner {
 
         void updateTrackedHumans(const hanp_msgs::TrackedHumans& tracked_humans);
 
-        void setParams(double alpha, double d_min, double d_max);
+        void setParams(double alpha_max, double d_low, double d_high, double predict_time);
 
     private:
-        double alpha, d_min, d_max;
+        double alpha_max_, d_low_, d_high_;
+        double predict_time_;
 
-        //hanp_msgs::TrackedHumans& tracked_humans_;
-        // void checkCompatabilty(base_local_planner::Trajectory& trajectory, tf::Stamped<tf::Pose> global_pose,
-        //     tf::Stamped<tf::Pose> global_vel, tf::Stamped<tf::Pose>& drive_velocities);
+        hanp_msgs::TrackedHumans humans_;
 
+        double getCompatabilty(double d_p, double alpha);
     };
 
 }

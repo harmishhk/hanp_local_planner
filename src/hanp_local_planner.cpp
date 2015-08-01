@@ -123,7 +123,7 @@ namespace hanp_local_planner
         prefer_forward_costs_->setPenalty(config.backward_motion_penalty);
 
         // TODO: make params configurable
-        context_cost_function_->setParams(M_PI/2, 0.5, 5.0);
+        context_cost_function_->setParams(M_PI/2, 0.5, 5.0, config.sim_time);
 
         int vx_samp, vy_samp, vth_samp;
         vx_samp = config.vx_samples;
@@ -158,7 +158,7 @@ namespace hanp_local_planner
         point_head_height_ = config.point_head_height;
     }
 
-    HANPLocalPlanner::HANPLocalPlanner() : initialized_(false), odom_helper_("odom"), setup_(false) { }
+    HANPLocalPlanner::HANPLocalPlanner() : initialized_(false), odom_helper_(PLANNING_FRAME), setup_(false) { }
 
     void HANPLocalPlanner::initialize(std::string name, tf::TransformListener* tf, costmap_2d::Costmap2DROS* costmap_ros)
     {
@@ -220,7 +220,7 @@ namespace hanp_local_planner
             map_viz_.initialize(name, planner_util_.getGlobalFrame(), boost::bind(&HANPLocalPlanner::getCellCosts, this, _1, _2, _3, _4, _5, _6));
 
             std::string frame_id;
-            private_nh.param("global_frame_id", frame_id, std::string("odom"));
+            private_nh.param("global_frame_id", frame_id, std::string(PLANNING_FRAME));
 
             traj_cloud_ = new pcl::PointCloud<base_local_planner::MapGridCostPoint>;
             traj_cloud_->header.frame_id = frame_id;
@@ -357,6 +357,20 @@ namespace hanp_local_planner
 
         base_local_planner::Trajectory path = findBestPath(global_pose, robot_vel, drive_cmds, costmap_ros_->getRobotFootprint());
         //ROS_ERROR("Best: %.2f, %.2f, %.2f, %.2f", path.xv_, path.yv_, path.thetav_, path.cost_);
+
+        // TODO: filter drive_cmds for contex cost based compatibility
+
+        // for list of scaling values, starting from 0 with SPEED_ADAPTATION_STEPS
+        //  score the trajectory
+
+        // scale drive_cmds according to calculated scaling value
+        //  e.g. for stopping the robot (scale = 0.0)
+        //     tf::Vector3 start(0, 0, 0);
+        //     drive_velocities.setOrigin(start);
+        //     tf::Matrix3x3 matrix;
+        //     matrix.setRotation(tf::createQuaternionFromYaw(0));
+        //     drive_velocities.setBasis(matrix);
+        //     ROS_INFO_NAMED("compatibility", "reducing robot speed to 0");
 
         /* For timing uncomment
         gettimeofday(&end, NULL);
@@ -638,6 +652,48 @@ namespace hanp_local_planner
 
     void HANPLocalPlanner::trackedHumansCB(const hanp_msgs::TrackedHumans& tracked_humans)
     {
-        context_cost_function_->updateTrackedHumans(tracked_humans);
+        // get tracked humans pointer locally for thread safety
+        auto humans_transformed = tracked_humans;
+
+        if(planner_util_.getGlobalFrame() != humans_transformed.header.frame_id)
+        {
+            if(humans_transformed.tracks.size() > 0)
+            {
+                //transform human pose in global frame
+                int res;
+                try
+                {
+                    std::string error_msg;
+                    res = tf_->waitForTransform(planner_util_.getGlobalFrame(), humans_transformed.header.frame_id,
+                        ros::Time(0), ros::Duration(0.5), ros::Duration(0.01), &error_msg);
+                    tf::StampedTransform humans_to_global_transform;
+                    tf_->lookupTransform(planner_util_.getGlobalFrame(), humans_transformed.header.frame_id,
+                        ros::Time(0), humans_to_global_transform);
+
+                    for(auto human : humans_transformed.tracks)
+                    {
+                        // transform position
+                        tf::Pose human_pose;
+                        tf::poseMsgToTF(human.pose.pose, human_pose);
+                        tf::poseTFToMsg(humans_to_global_transform * human_pose, human.pose.pose);
+
+                        // transfrom velocities
+                        tf::Vector3 linear_vel, angular_vel;
+                        tf::vector3MsgToTF(human.twist.twist.linear, linear_vel);
+                        tf::vector3MsgToTF(human.twist.twist.angular, angular_vel);
+                        tf::vector3TFToMsg(humans_to_global_transform * linear_vel, human.twist.twist.linear);
+                        tf::vector3TFToMsg(humans_to_global_transform * angular_vel, human.twist.twist.angular);
+
+                    }
+                }
+                catch(const tf::TransformException &ex)
+                {
+                    ROS_ERROR("hanp_local_planner: transform failure (%d): %s", res, ex.what());
+                }
+            }
+            humans_transformed.header.frame_id = planner_util_.getGlobalFrame();
+        }
+
+        context_cost_function_->updateTrackedHumans(humans_transformed);
     }
 };
