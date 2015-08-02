@@ -32,10 +32,11 @@
 
 #include <base_local_planner/trajectory_cost_function.h>
 #include <hanp_msgs/TrackedHumans.h>
-
-#include <math.h>
+#include <tf/transform_listener.h>
 
 namespace hanp_local_planner {
+
+    typedef std::array<double, 3> human_pose;
 
     class ContextCostFunction: public base_local_planner::TrajectoryCostFunction
     {
@@ -56,7 +57,11 @@ namespace hanp_local_planner {
 
         hanp_msgs::TrackedHumans humans_;
 
+        std::vector<human_pose> predictHumanPoses(hanp_msgs::TrackedHuman& human);
         double getCompatabilty(double d_p, double alpha);
+
+        // TODO: make this configurable
+        std::vector<double> human_predict_vel_steps_ = {0.7, 1.0, 1.3};
     };
 
 }

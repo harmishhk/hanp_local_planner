@@ -62,21 +62,28 @@ namespace hanp_local_planner
         // copy humans for thread safety
         auto humans = humans_;
 
-        // TODO: predict robot position
+        double compatibility = 0.0;
+
+        // get the future pose of the robot
+        double rx, ry, rtheta;
+        traj.getEndpoint(rx, ry, rtheta);
 
         // TODO: discard humans, if information is too old
 
         for(auto human : humans.tracks)
         {
-            // TODO: predict human position, for three speed possibilities
+            // predict human position, for three speed possibilities
+            for(auto future_human_pose : predictHumanPoses(human))
+            {
+                // calculate distance of robot to person
+                auto d_p = hypot(rx - future_human_pose[0], ry - future_human_pose[1]);
 
-            // TODO: calculate distance of robot to person
-            //  hypot(rx - hx, ry - hy);
-
-            // TODO: calculate compatibility and update overall value to lowest of all
+                // calculate compatibility and update overall value to lowest of all
+                compatibility = std::min(compatibility, getCompatabilty(d_p, std::abs(rtheta - future_human_pose[2])));
+            }
         }
 
-        return 0.0;
+        return compatibility;
     }
 
     void ContextCostFunction::updateTrackedHumans(const hanp_msgs::TrackedHumans& tracked_humans)
@@ -86,10 +93,35 @@ namespace hanp_local_planner
 
     double ContextCostFunction::getCompatabilty(double d_p, double alpha)
     {
-        return 0.0;
+        if(d_p <= d_low_)
+        {
+            return 1.0;
+        }
+        else if(d_p >= d_high_)
+        {
+            return 0.0;
+        }
+        else if(alpha >= alpha_max_)
+        {
+            return 0.0;
+        }
+        else
+        {
+            return (((d_p - d_low_) / d_high_) * (alpha / alpha_max_));
+        }
     }
 
+    std::vector<human_pose> ContextCostFunction::predictHumanPoses(hanp_msgs::TrackedHuman& human)
+    {
+        std::vector<human_pose> future_human_poses;
+        for(auto vel : human_predict_vel_steps_)
+        {
+            future_human_poses.push_back({
+                human.pose.pose.position.x + (human.twist.twist.linear.x * vel),
+                human.pose.pose.position.x + (human.twist.twist.linear.x * vel),
+                tf::getYaw(human.pose.pose.orientation)});
+        }
 
-
-
+        return future_human_poses;
+    }
 }
