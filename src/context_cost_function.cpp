@@ -28,9 +28,9 @@
  */
 
 // context-cost related parameters
-#define ALPHA_MAX M_PI/2 // radians, angle between robot heading and inverse of human heading
-#define D_LOW 1.3// meters, minimum distance for compatibility measure
-#define D_HIGH 10.0// meters, maximum distance for compatibility measure
+#define ALPHA_MAX 2.09 // (2*M_PI/3) radians, angle between robot heading and inverse of human heading
+#define D_LOW 1.3 // meters, minimum distance for compatibility measure
+#define D_HIGH 10.0 // meters, maximum distance for compatibility measure
 #define PREDICT_TIME 3.0 // seconds, time for predicting human and robot position, before checking compatibility
 
 #include <hanp_local_planner/context_cost_function.h>
@@ -65,7 +65,7 @@ namespace hanp_local_planner
         auto humans = humans_;
 
         // temporary variables for future robot pose, and compatibility
-        double rx, ry, rtheta, d_p, compatibility;
+        double rx, ry, rtheta, d_p, alpha, compatibility;
         auto point_index = traj.getPointsSize() - 1;
 
         // TODO: discard humans, if information is too old
@@ -83,12 +83,14 @@ namespace hanp_local_planner
 
                     // calculate distance of robot to person
                     d_p = hypot(rx - future_human_pose[0], ry - future_human_pose[1]);
+                    alpha = fabs(angles::shortest_angular_distance(rtheta,
+                        angles::normalize_angle_positive(future_human_pose[2]) - M_PI));
 
                     // check compatibility
-                    compatibility = getCompatabilty(d_p, std::abs(rtheta - future_human_pose[2]));
+                    compatibility = getCompatabilty(d_p, alpha);
                 }
                 // calculate compatibility
-                while((compatibility > 0.0) && (point_index > 0));
+                while((compatibility == 0.0) && (point_index > 0));
 
                 // no need to check more when compatibility is already 0
                 if (point_index == 0)
@@ -98,7 +100,7 @@ namespace hanp_local_planner
             }
         }
 
-        return point_index / (traj.getPointsSize() - 1);
+        return (double)point_index / (double)(traj.getPointsSize() - 1);
     }
 
     void ContextCostFunction::updateTrackedHumans(const hanp_msgs::TrackedHumans& tracked_humans)
@@ -110,15 +112,15 @@ namespace hanp_local_planner
     {
         if(d_p <= d_low_)
         {
-            return 1.0;
+            return 0.0;
         }
         else if(d_p >= d_high_)
         {
-            return 0.0;
+            return 1.0;
         }
         else if(alpha >= alpha_max_)
         {
-            return 0.0;
+            return 1.0;
         }
         else
         {
@@ -132,8 +134,8 @@ namespace hanp_local_planner
         for(auto vel : human_predict_vel_steps_)
         {
             future_human_poses.push_back({
-                human.pose.pose.position.x + (human.twist.twist.linear.x * vel),
-                human.pose.pose.position.x + (human.twist.twist.linear.x * vel),
+                human.pose.pose.position.x + (human.twist.twist.linear.x * vel) * predict_time_,
+                human.pose.pose.position.y + (human.twist.twist.linear.y * vel) * predict_time_,
                 tf::getYaw(human.pose.pose.orientation)});
         }
 

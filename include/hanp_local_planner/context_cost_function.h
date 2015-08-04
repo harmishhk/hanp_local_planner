@@ -33,6 +33,7 @@
 #include <base_local_planner/trajectory_cost_function.h>
 #include <hanp_msgs/TrackedHumans.h>
 #include <tf/transform_listener.h>
+#include <angles/angles.h>
 
 namespace hanp_local_planner {
 
@@ -61,7 +62,7 @@ namespace hanp_local_planner {
         double getCompatabilty(double d_p, double alpha);
 
         // TODO: make this configurable
-        std::vector<double> human_predict_vel_steps_ = {0.7, 1.0, 1.3};
+        std::vector<double> human_predict_vel_steps_ = {0.8, 1.0, 1.2};
     };
 
 }
