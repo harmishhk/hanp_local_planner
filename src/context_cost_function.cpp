@@ -57,16 +57,16 @@ namespace hanp_local_planner
         predict_time_ = predict_time;
     }
 
+    // TODO: abuse this function to give sclae with with the trajectory should be trunkated
+    //  for faster calculation
     double ContextCostFunction::scoreTrajectory(base_local_planner::Trajectory &traj)
     {
         // copy humans for thread safety
         auto humans = humans_;
 
-        double compatibility = 0.0;
-
-        // get the future pose of the robot
-        double rx, ry, rtheta;
-        traj.getEndpoint(rx, ry, rtheta);
+        // temporary variables for future robot pose, and compatibility
+        double rx, ry, rtheta, d_p, compatibility;
+        auto point_index = traj.getPointsSize() - 1;
 
         // TODO: discard humans, if information is too old
 
@@ -75,15 +75,30 @@ namespace hanp_local_planner
             // predict human position, for three speed possibilities
             for(auto future_human_pose : predictHumanPoses(human))
             {
-                // calculate distance of robot to person
-                auto d_p = hypot(rx - future_human_pose[0], ry - future_human_pose[1]);
+                point_index++; // incrementing here because we decrement in the loop
+                do
+                {
+                    // get the future pose of the robot
+                    traj.getPoint(--point_index, rx, ry, rtheta);
 
-                // calculate compatibility and update overall value to lowest of all
-                compatibility = std::min(compatibility, getCompatabilty(d_p, std::abs(rtheta - future_human_pose[2])));
+                    // calculate distance of robot to person
+                    d_p = hypot(rx - future_human_pose[0], ry - future_human_pose[1]);
+
+                    // check compatibility
+                    compatibility = getCompatabilty(d_p, std::abs(rtheta - future_human_pose[2]));
+                }
+                // calculate compatibility
+                while((compatibility > 0.0) && (point_index > 0));
+
+                // no need to check more when compatibility is already 0
+                if (point_index == 0)
+                {
+                    return 0.0;
+                }
             }
         }
 
-        return compatibility;
+        return point_index / (traj.getPointsSize() - 1);
     }
 
     void ContextCostFunction::updateTrackedHumans(const hanp_msgs::TrackedHumans& tracked_humans)

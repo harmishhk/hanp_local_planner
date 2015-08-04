@@ -358,20 +358,6 @@ namespace hanp_local_planner
         base_local_planner::Trajectory path = findBestPath(global_pose, robot_vel, drive_cmds, costmap_ros_->getRobotFootprint());
         //ROS_ERROR("Best: %.2f, %.2f, %.2f, %.2f", path.xv_, path.yv_, path.thetav_, path.cost_);
 
-        // TODO: filter drive_cmds for contex cost based compatibility
-
-        // for list of scaling values, starting from 0 with SPEED_ADAPTATION_STEPS
-        //  score the trajectory
-
-        // scale drive_cmds according to calculated scaling value
-        //  e.g. for stopping the robot (scale = 0.0)
-        //     tf::Vector3 start(0, 0, 0);
-        //     drive_velocities.setOrigin(start);
-        //     tf::Matrix3x3 matrix;
-        //     matrix.setRotation(tf::createQuaternionFromYaw(0));
-        //     drive_velocities.setBasis(matrix);
-        //     ROS_INFO_NAMED("compatibility", "reducing robot speed to 0");
-
         /* For timing uncomment
         gettimeofday(&end, NULL);
         start_t = start.tv_sec + double(start.tv_usec) / 1e6;
@@ -384,8 +370,23 @@ namespace hanp_local_planner
         cmd_vel.linear.y = drive_cmds.getOrigin().getY();
         cmd_vel.angular.z = tf::getYaw(drive_cmds.getRotation());
 
+        // check if trajectory need to be scaled down as per context-cost function
+        auto trajectory_scale = context_cost_function_->scoreTrajectory(path);
+        if(trajectory_scale < 1.0)
+        {
+            // sclae down the trajectory by removing points
+            auto remove_end = path.getPointsSize();
+            auto remove_start = (unsigned int)(trajectory_scale * remove_end);
+            path.erasePoints(remove_start, remove_end);
+
+            // update the drive_cmds
+            cmd_vel.linear.x *= trajectory_scale;
+            cmd_vel.linear.y *= trajectory_scale;
+            cmd_vel.angular.z *= trajectory_scale;
+        }
+
         std::vector<geometry_msgs::PoseStamped> local_plan;
-        if(path.cost_ < 0)
+        if(path.cost_ < 0 || path.getPointsSize() == 0)
         {
             ROS_DEBUG_NAMED("hanp_local_planner", "The hanp local planner failed to find a valid plan, cost functions discarded all candidates. This can mean there is an obstacle too close to the robot.");
             local_plan.clear();
