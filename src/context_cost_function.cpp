@@ -72,6 +72,8 @@ namespace hanp_local_planner
 
         for(auto human : humans.tracks)
         {
+            // TODO: discard humans who are behind the robot
+
             // predict human position, for three speed possibilities
             for(auto future_human_pose : predictHumanPoses(human))
             {
@@ -83,11 +85,19 @@ namespace hanp_local_planner
 
                     // calculate distance of robot to person
                     d_p = hypot(rx - future_human_pose[0], ry - future_human_pose[1]);
+                    // ROS_DEBUG_NAMED("context_cost_function", "rx=%f, ry=%f, hx=%f, hy=%f, d_p=%f",
+                    // rx, ry, future_human_pose[0], future_human_pose[1], d_p);
                     alpha = fabs(angles::shortest_angular_distance(rtheta,
                         angles::normalize_angle_positive(future_human_pose[2]) - M_PI));
+                    // ROS_DEBUG_NAMED("context_cost_function", "rtheta=%f, h_inv_theta=%f, alpha=%f",
+                    // rtheta, angles::normalize_angle_positive(future_human_pose[2]) - M_PI, alpha);
 
                     // check compatibility
                     compatibility = getCompatabilty(d_p, alpha);
+
+                    ROS_DEBUG_NAMED("context_cost_function", "calculated compatibility %f"
+                    "at d_p=%f, alpha=%f point: x=%f, y=%f (%d of %d)", compatibility,
+                    d_p, alpha, rx, ry, point_index, traj.getPointsSize()-1);
                 }
                 // calculate compatibility
                 while((compatibility == 0.0) && (point_index > 0));
@@ -137,6 +147,10 @@ namespace hanp_local_planner
                 human.pose.pose.position.x + (human.twist.twist.linear.x * vel) * predict_time_,
                 human.pose.pose.position.y + (human.twist.twist.linear.y * vel) * predict_time_,
                 tf::getYaw(human.pose.pose.orientation)});
+
+            // ROS_DEBUG_NAMED("context_cost_function", "predected human (%d) pose: x=%f, y=%f, theta=%f with vel sclae %f",
+            // human.track_id, future_human_poses.back()[0], future_human_poses.back()[1],
+            // future_human_poses.back()[2], vel);
         }
 
         return future_human_poses;
