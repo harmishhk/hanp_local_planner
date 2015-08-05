@@ -383,6 +383,8 @@ namespace hanp_local_planner
             cmd_vel.linear.x *= trajectory_scale;
             cmd_vel.linear.y *= trajectory_scale;
             cmd_vel.angular.z *= trajectory_scale;
+
+            ROS_DEBUG_NAMED("hanp_local_planner", "hanp local planner scaled the plan by %d %%", (int)(trajectory_scale * 100));
         }
 
         std::vector<geometry_msgs::PoseStamped> local_plan;
