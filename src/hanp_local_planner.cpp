@@ -122,8 +122,9 @@ namespace hanp_local_planner
 
         prefer_forward_costs_->setPenalty(config.backward_motion_penalty);
 
-        // TODO: make params configurable
-        context_cost_function_->setParams(2*M_PI/3, 0.7, 10.0, config.sim_time);
+        context_cost_function_->setParams(config.cc_alpha_max, config.cc_d_low,
+            config.cc_d_high, config.sim_time, {config.cc_human_predict_scale_lower,
+            config.cc_human_predict_scale_nominal, config.cc_human_predict_scale_higher});
 
         int vx_samp, vy_samp, vth_samp;
         vx_samp = config.vx_samples;

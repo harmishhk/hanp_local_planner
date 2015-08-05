@@ -29,9 +29,11 @@
 
 // context-cost related parameters
 #define ALPHA_MAX 2.09 // (2*M_PI/3) radians, angle between robot heading and inverse of human heading
-#define D_LOW 1.3 // meters, minimum distance for compatibility measure
+#define D_LOW 0.7 // meters, minimum distance for compatibility measure
 #define D_HIGH 10.0 // meters, maximum distance for compatibility measure
-#define PREDICT_TIME 3.0 // seconds, time for predicting human and robot position, before checking compatibility
+#define PREDICT_TIME 2.0 // seconds, time for predicting human and robot position, before checking compatibility
+#define HUMAN_POSE_PREDICT_LOWER_SCALE 0.8 // human slow-down velocity multiplier
+#define HUMAN_POSE_PREDICT_HIGHER_SCALE 1.2 // human speed-up velocity multiplier
 
 #include <hanp_local_planner/context_cost_function.h>
 
@@ -44,17 +46,25 @@ namespace hanp_local_planner
     bool ContextCostFunction::prepare()
     {
         // set default parameters
-        setParams(ALPHA_MAX, D_LOW, D_HIGH, PREDICT_TIME);
+        std::vector<double> human_pose_predict_scales = {HUMAN_POSE_PREDICT_LOWER_SCALE, 1.0, HUMAN_POSE_PREDICT_HIGHER_SCALE};
+        setParams(ALPHA_MAX, D_LOW, D_HIGH, PREDICT_TIME, human_pose_predict_scales);
 
         return true;
     }
 
-    void ContextCostFunction::setParams(double alpha_max, double d_low, double d_high, double predict_time)
+    void ContextCostFunction::setParams(double alpha_max, double d_low, double d_high,
+        double predict_time, std::vector<double> human_pose_predict_scales)
     {
         alpha_max_ = alpha_max;
         d_low_ = d_low;
         d_high_ = d_high;
         predict_time_ = predict_time;
+        human_pose_predict_scales_ = human_pose_predict_scales;
+
+        ROS_DEBUG_NAMED("context_cost_function", "context-cost function parameters set: "
+        "alpha_max=%f, d_low=%f, d_high=:%f, predict_time=%f, human_pose_predict_scales=[%f, %f, %f]",
+        alpha_max_, d_low_, d_high_, predict_time_, human_pose_predict_scales_[0],
+        human_pose_predict_scales_[1], human_pose_predict_scales_[2]);
     }
 
     // abuse this function to give sclae with with the trajectory should be truncated
@@ -140,16 +150,16 @@ namespace hanp_local_planner
     std::vector<human_pose> ContextCostFunction::predictHumanPoses(hanp_msgs::TrackedHuman& human)
     {
         std::vector<human_pose> future_human_poses;
-        for(auto vel : human_predict_vel_steps_)
+        for(auto vel_scale : human_pose_predict_scales_)
         {
             future_human_poses.push_back({
-                human.pose.pose.position.x + (human.twist.twist.linear.x * vel) * predict_time_,
-                human.pose.pose.position.y + (human.twist.twist.linear.y * vel) * predict_time_,
+                human.pose.pose.position.x + (human.twist.twist.linear.x * vel_scale) * predict_time_,
+                human.pose.pose.position.y + (human.twist.twist.linear.y * vel_scale) * predict_time_,
                 tf::getYaw(human.pose.pose.orientation)});
 
             // ROS_DEBUG_NAMED("context_cost_function", "predected human (%d) pose: x=%f, y=%f, theta=%f with vel sclae %f",
             // human.track_id, future_human_poses.back()[0], future_human_poses.back()[1],
-            // future_human_poses.back()[2], vel);
+            // future_human_poses.back()[2], vel_scale);
         }
 
         return future_human_poses;
