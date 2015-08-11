@@ -380,10 +380,12 @@ namespace hanp_local_planner
             auto remove_start = (unsigned int)(trajectory_scale * remove_end);
             path.erasePoints(remove_start, remove_end);
 
-            // update the drive_cmds
-            cmd_vel.linear.x *= trajectory_scale;
-            cmd_vel.linear.y *= trajectory_scale;
-            cmd_vel.angular.z *= trajectory_scale;
+            // update the drive_cmds, while respecting the acceleration limits
+            base_local_planner::LocalPlannerLimits limits = planner_util_.getCurrentLimits();
+            // TODO: make use of use_dwa parameter
+            cmd_vel.linear.x = std::max(cmd_vel.linear.x * trajectory_scale, robot_vel.getOrigin().getX() - limits.acc_lim_x * sim_time_);
+            cmd_vel.linear.y = std::max(cmd_vel.linear.y * trajectory_scale, robot_vel.getOrigin().getY() - limits.acc_lim_y * sim_time_);
+            cmd_vel.angular.z = std::max(cmd_vel.angular.z * trajectory_scale, tf::getYaw(robot_vel.getRotation()) - limits.acc_lim_theta * sim_time_);
 
             ROS_DEBUG_NAMED("hanp_local_planner", "hanp local planner scaled the plan by %d %%", (int)(trajectory_scale * 100));
         }
