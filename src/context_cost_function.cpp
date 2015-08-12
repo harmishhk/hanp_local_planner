@@ -41,7 +41,14 @@
 namespace hanp_local_planner
 {
     // empty constructor and destructor
-    ContextCostFunction::ContextCostFunction() {}
+    ContextCostFunction::ContextCostFunction()
+    {
+        if(publish_predicted_human_markers_)
+        {
+            ros::NodeHandle private_nh("~/");
+            predict_human_pub_ = private_nh.advertise<visualization_msgs::MarkerArray>("predicted_human_poses", 1);
+        }
+    }
     ContextCostFunction::~ContextCostFunction() {}
 
     bool ContextCostFunction::prepare()
@@ -81,6 +88,40 @@ namespace hanp_local_planner
         auto point_index_max = traj.getPointsSize();
 
         // TODO: discard humans, if information is too old
+
+        if(publish_predicted_human_markers_)
+        {
+            predicted_humans_markers_.markers.clear();
+
+            for(auto human: humans.tracks)
+            {
+                visualization_msgs::Marker predicted_human;
+                predicted_human.header.frame_id = humans.header.frame_id;
+                predicted_human.header.stamp = ros::Time();
+                predicted_human.id = human.track_id;
+                predicted_human.type = visualization_msgs::Marker::SPHERE_LIST;
+                predicted_human.action = visualization_msgs::Marker::MODIFY;
+                predicted_human.scale.x = 0.1;
+                predicted_human.scale.y = 0.1;
+                predicted_human.scale.z = 0.1;
+                predicted_human.color.a = 1.0;
+                predicted_human.color.r = 0.0;
+                predicted_human.color.g = 1.0;
+                predicted_human.color.b = 0.0;
+
+                for(auto future_human_pose : predictHumanPoses(human))
+                {
+                    geometry_msgs::Point future_human_point;
+                    future_human_point.x = future_human_pose[0];
+                    future_human_point.y = future_human_pose[1];
+                    predicted_human.points.push_back(future_human_point);
+                }
+
+                predicted_humans_markers_.markers.push_back(predicted_human);
+            }
+
+            predict_human_pub_.publish(predicted_humans_markers_);
+        }
 
         for(auto human : humans.tracks)
         {

@@ -35,6 +35,8 @@
 #include <tf/transform_listener.h>
 #include <angles/angles.h>
 
+#include <visualization_msgs/MarkerArray.h>
+
 namespace hanp_local_planner {
 
     typedef std::array<double, 3> human_pose;
@@ -65,6 +67,10 @@ namespace hanp_local_planner {
 
         std::vector<double> human_pose_predict_scales_;
         double  human_pose_predict_angle_;
+
+        bool publish_predicted_human_markers_ = true;
+        visualization_msgs::MarkerArray predicted_humans_markers_;
+        ros::Publisher predict_human_pub_;
     };
 
 }

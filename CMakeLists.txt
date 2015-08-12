@@ -28,6 +28,7 @@ find_package(catkin REQUIRED COMPONENTS
   pcl_conversions
   roscpp
   tf
+  visualization_msgs
 )
 
 find_package(Eigen3 REQUIRED)
@@ -82,6 +83,7 @@ catkin_package(
     pcl_conversions
     roscpp
     tf
+    visualization_msgs
 #   DEPENDS
 #     system_lib
 )
