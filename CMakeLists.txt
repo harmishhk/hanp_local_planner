@@ -102,6 +102,7 @@ add_definitions(${EIGEN_DEFINITIONS})
 add_library(hanp_local_planner
   src/hanp_local_planner.cpp
   src/context_cost_function.cpp
+  src/spencer_trajectory_generator.cpp
 )
 
 # cmake target dependencies of the c++ library

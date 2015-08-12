@@ -65,7 +65,6 @@
 #include <base_local_planner/trajectory.h>
 #include <base_local_planner/local_planner_limits.h>
 #include <base_local_planner/local_planner_util.h>
-#include <base_local_planner/simple_trajectory_generator.h>
 #include <base_local_planner/oscillation_cost_function.h>
 #include <base_local_planner/map_grid_cost_function.h>
 #include <base_local_planner/obstacle_cost_function.h>
@@ -73,6 +72,7 @@
 #include <base_local_planner/simple_scored_sampling_planner.h>
 #include <hanp_msgs/TrackedHumans.h>
 
+#include <hanp_local_planner/spencer_trajectory_generator.h>
 #include <hanp_local_planner/context_cost_function.h>
 
 namespace hanp_local_planner
@@ -155,7 +155,7 @@ namespace hanp_local_planner
         base_local_planner::LocalPlannerUtil planner_util_;
         base_local_planner::Trajectory result_traj_;
         base_local_planner::MapGridVisualizer map_viz_;
-        base_local_planner::SimpleTrajectoryGenerator generator_;
+        hanp_local_planner::SpencerTrajectoryGenerator generator_;
         base_local_planner::OscillationCostFunction oscillation_costs_;
         base_local_planner::ObstacleCostFunction* obstacle_costs_;
         base_local_planner::MapGridCostFunction* path_costs_;
