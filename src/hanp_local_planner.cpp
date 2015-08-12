@@ -371,6 +371,25 @@ namespace hanp_local_planner
         cmd_vel.linear.y = drive_cmds.getOrigin().getY();
         cmd_vel.angular.z = tf::getYaw(drive_cmds.getRotation());
 
+        std::vector<geometry_msgs::PoseStamped> local_plan;
+
+        if(path.cost_ < 0 || path.getPointsSize() == 0)
+        {
+            ROS_DEBUG_NAMED("hanp_local_planner", "The hanp local planner failed to find a valid plan, cost functions discarded all candidates. This can mean there is an obstacle too close to the robot.");
+            local_plan.clear();
+            publishLocalPlan(local_plan);
+
+            // look in the front of the robot in case of failure
+            geometry_msgs::PointStamped point_head;
+            point_head.header.stamp = ros::Time::now();
+            point_head.header.frame_id = robot_base_frame_;
+            point_head.point.x = 1.0;
+            point_head.point.y = 0.0;
+            point_head.point.z = point_head_height_;
+            publishPointHead(point_head);
+            return false;
+        }
+
         // check if trajectory need to be scaled down as per context-cost function
         auto trajectory_scale = context_cost_function_->scoreTrajectory(path);
         if(trajectory_scale < 1.0)
@@ -388,24 +407,6 @@ namespace hanp_local_planner
             cmd_vel.angular.z = std::max(cmd_vel.angular.z * trajectory_scale, tf::getYaw(robot_vel.getRotation()) - limits.acc_lim_theta * sim_time_);
 
             ROS_DEBUG_NAMED("hanp_local_planner", "hanp local planner scaled the plan by %d %%", (int)(trajectory_scale * 100));
-        }
-
-        std::vector<geometry_msgs::PoseStamped> local_plan;
-        if(path.cost_ < 0 || path.getPointsSize() == 0)
-        {
-            ROS_DEBUG_NAMED("hanp_local_planner", "The hanp local planner failed to find a valid plan, cost functions discarded all candidates. This can mean there is an obstacle too close to the robot.");
-            local_plan.clear();
-            publishLocalPlan(local_plan);
-
-            // look in the front of the robot in case of failure
-            geometry_msgs::PointStamped point_head;
-            point_head.header.stamp = ros::Time::now();
-            point_head.header.frame_id = robot_base_frame_;
-            point_head.point.x = 1.0;
-            point_head.point.y = 0.0;
-            point_head.point.z = point_head_height_;
-            publishPointHead(point_head);
-            return false;
         }
 
         ROS_DEBUG_NAMED("hanp_local_planner", "A valid velocity command of (%.2f, %.2f, %.2f) was found for this cycle.",
@@ -427,16 +428,19 @@ namespace hanp_local_planner
         publishLocalPlan(local_plan);
 
         // look at the end of the local plan
-        tf::Pose local_plan_end;
-        tf::poseMsgToTF(local_plan.back().pose, local_plan_end);
-        auto local_plan_end_extended = local_plan_end(tf::Vector3(0.5,0,0));
-        geometry_msgs::PointStamped point_head;
-        point_head.header.stamp = ros::Time::now();
-        point_head.header.frame_id = local_plan.back().header.frame_id;
-        point_head.point.x = local_plan_end_extended.x();
-        point_head.point.y = local_plan_end_extended.y();
-        point_head.point.z = point_head_height_;
-        publishPointHead(point_head);
+        if(local_plan.size() > 0)
+        {
+            tf::Pose local_plan_end;
+            tf::poseMsgToTF(local_plan.back().pose, local_plan_end);
+            auto local_plan_end_extended = local_plan_end(tf::Vector3(0.5,0,0));
+            geometry_msgs::PointStamped point_head;
+            point_head.header.stamp = ros::Time::now();
+            point_head.header.frame_id = local_plan.back().header.frame_id;
+            point_head.point.x = local_plan_end_extended.x();
+            point_head.point.y = local_plan_end_extended.y();
+            point_head.point.z = point_head_height_;
+            publishPointHead(point_head);
+        }
 
         return true;
     }
