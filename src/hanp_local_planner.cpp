@@ -677,6 +677,9 @@ namespace hanp_local_planner
                     tf::StampedTransform humans_to_global_transform;
                     tf_->lookupTransform(planner_util_.getGlobalFrame(), humans.header.frame_id,
                         ros::Time(0), humans_to_global_transform);
+                    geometry_msgs::Twist human_twist_in_global;
+                    tf_->lookupTwist(humans.header.frame_id, planner_util_.getGlobalFrame(),
+                        ros::Time(0), ros::Duration(0.1), human_twist_in_global);
 
                     for(auto human : humans.tracks)
                     {
@@ -686,17 +689,35 @@ namespace hanp_local_planner
                         tf::poseMsgToTF(human.pose.pose, human_pose);
                         tf::poseTFToMsg(humans_to_global_transform * human_pose, human_transformed.pose.pose);
 
-                        // no need to transform velocities as they are represented in reference frame of human
-                        human_transformed.twist.twist = human.twist.twist;
+                        // transfrom velocities, which is just rotating the velocity vector
+                        tf::Vector3 linear_vel, angular_vel;
+                        tf::vector3MsgToTF(human.twist.twist.linear, linear_vel);
+                        tf::vector3MsgToTF(human.twist.twist.angular, angular_vel);
+                        humans_to_global_transform.setOrigin(tf::Vector3(0.0, 0.0, 0.0));
+                        tf::vector3TFToMsg(humans_to_global_transform * linear_vel, human_transformed.twist.twist.linear);
+                        tf::vector3TFToMsg(humans_to_global_transform * angular_vel, human_transformed.twist.twist.angular);
+
+                        // in case, human_tracking frame is also moving with respect to planning frame
+                        human_transformed.twist.twist.linear.x += human_twist_in_global.linear.x;
+                        human_transformed.twist.twist.linear.y += human_twist_in_global.linear.y;
+                        human_transformed.twist.twist.linear.z += human_twist_in_global.linear.z;
+                        human_transformed.twist.twist.angular.x += human_twist_in_global.angular.x;
+                        human_transformed.twist.twist.angular.y += human_twist_in_global.angular.y;
+                        human_transformed.twist.twist.angular.z += human_twist_in_global.angular.z;
 
                         humans_transformed.tracks.push_back(human_transformed);
 
-                        // ROS_INFO_NAMED("hanp_local_planner", "transformed human to %s frame,"
-                        // " resulting pose: x=%f, y=%f theta=%f, linvel=%f, angvel=%f",
+                        // ROS_DEBUG_NAMED("hanp_local_planner", "transformed human to %s frame,"
+                        // " resulting pose: x=%f, y=%f theta=%f, linvel: x=%f, y=%f, angvel z=%f",
                         // planner_util_.getGlobalFrame().c_str(), human_transformed.pose.pose.position.x,
                         // human_transformed.pose.pose.position.y, tf::getYaw(human_transformed.pose.pose.orientation),
-                        // human_transformed.twist.twist.linear.x, human_transformed.twist.twist.angular.z);
+                        // human_transformed.twist.twist.linear.x, human_transformed.twist.twist.linear.y,
+                        // human_transformed.twist.twist.angular.z);
                     }
+                }
+                catch(const tf::ExtrapolationException &ex)
+                {
+                    ROS_DEBUG("hanp_local_planner: cannot extrapolate transform");
                 }
                 catch(const tf::TransformException &ex)
                 {
