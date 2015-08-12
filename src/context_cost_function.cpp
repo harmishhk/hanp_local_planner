@@ -75,7 +75,7 @@ namespace hanp_local_planner
 
         // temporary variables for future robot pose, and compatibility
         double rx, ry, rtheta, d_p, alpha, compatibility;
-        auto point_index = traj.getPointsSize() - 1;
+        auto point_index_max = traj.getPointsSize();
 
         // TODO: discard humans, if information is too old
 
@@ -86,11 +86,11 @@ namespace hanp_local_planner
             // predict human position, for three speed possibilities
             for(auto future_human_pose : predictHumanPoses(human))
             {
-                point_index++; // incrementing here because we decrement in the loop
+                unsigned int point_index = 0;
                 do
                 {
                     // get the future pose of the robot
-                    traj.getPoint(--point_index, rx, ry, rtheta);
+                    traj.getPoint(point_index, rx, ry, rtheta);
 
                     // calculate distance of robot to person
                     d_p = hypot(rx - future_human_pose[0], ry - future_human_pose[1]);
@@ -105,21 +105,29 @@ namespace hanp_local_planner
                     compatibility = getCompatabilty(d_p, alpha);
 
                     ROS_DEBUG_NAMED("context_cost_function", "calculated compatibility %f"
-                    "at d_p=%f, alpha=%f point: x=%f, y=%f (%d of %d)", compatibility,
-                    d_p, alpha, rx, ry, point_index, traj.getPointsSize()-1);
+                        " at d_p=%f, alpha=%f point: x=%f, y=%f (%d of %d)", compatibility,
+                        d_p, alpha, rx, ry, point_index, traj.getPointsSize()-1);
                 }
-                // calculate compatibility
-                while((compatibility == 0.0) && (point_index > 0));
+                // keep calculating, until we find incompatible situation or end of path
+                while((++point_index < point_index_max) && (compatibility > 0.0));
+                point_index_max = point_index;
 
-                // no need to check more when compatibility is already 0
-                if (point_index == 0)
+                // ROS_DEBUG_NAMED("context_cost_function", "calculated maximum point index %d"
+                //     " (out of %d) for human at x=%d, y=%f", point_index_max, traj.getPointsSize(),
+                //     future_human_pose[0], future_human_pose[1]);
+
+                // no need to check more when we have to stop
+                if (point_index_max == 1)
                 {
                     return 0.0;
                 }
             }
         }
 
-        return (double)point_index / (double)(traj.getPointsSize() - 1);
+        auto scaling = (double)(point_index_max - 1) / (double)(traj.getPointsSize() - 1);
+        ROS_DEBUG_NAMED("context_cost_function", "returning scale value of %f", scaling);
+
+        return scaling;
     }
 
     void ContextCostFunction::updateTrackedHumans(const hanp_msgs::TrackedHumans& tracked_humans)
@@ -158,8 +166,8 @@ namespace hanp_local_planner
                 tf::getYaw(human.pose.pose.orientation)});
 
             // ROS_DEBUG_NAMED("context_cost_function", "predected human (%d) pose: x=%f, y=%f, theta=%f with vel sclae %f",
-            // human.track_id, future_human_poses.back()[0], future_human_poses.back()[1],
-            // future_human_poses.back()[2], vel_scale);
+            //     human.track_id, future_human_poses.back()[0], future_human_poses.back()[1],
+            //     future_human_poses.back()[2], vel_scale);
         }
 
         return future_human_poses;
