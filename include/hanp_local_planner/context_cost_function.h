@@ -51,7 +51,8 @@ namespace hanp_local_planner {
         void updateTrackedHumans(const hanp_msgs::TrackedHumans& tracked_humans);
 
         void setParams(double alpha_max, double d_low, double d_high,
-            double predict_time, std::vector<double> human_pose_predict_scales);
+            double predict_time, std::vector<double> human_pose_predict_scales,
+            double human_pose_predict_angle);
 
     private:
         double alpha_max_, d_low_, d_high_;
@@ -63,6 +64,7 @@ namespace hanp_local_planner {
         double getCompatabilty(double d_p, double alpha);
 
         std::vector<double> human_pose_predict_scales_;
+        double  human_pose_predict_angle_;
     };
 
 }

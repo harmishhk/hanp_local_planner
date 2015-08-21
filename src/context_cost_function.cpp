@@ -34,6 +34,7 @@
 #define PREDICT_TIME 2.0 // seconds, time for predicting human and robot position, before checking compatibility
 #define HUMAN_POSE_PREDICT_LOWER_SCALE 0.8 // human slow-down velocity multiplier
 #define HUMAN_POSE_PREDICT_HIGHER_SCALE 1.2 // human speed-up velocity multiplier
+#define HUMAN_POSE_PREDICT_ANGLE 0.1 // deviation angle for human position predictions
 
 #include <hanp_local_planner/context_cost_function.h>
 
@@ -47,19 +48,21 @@ namespace hanp_local_planner
     {
         // set default parameters
         std::vector<double> human_pose_predict_scales = {HUMAN_POSE_PREDICT_LOWER_SCALE, 1.0, HUMAN_POSE_PREDICT_HIGHER_SCALE};
-        setParams(ALPHA_MAX, D_LOW, D_HIGH, PREDICT_TIME, human_pose_predict_scales);
+        setParams(ALPHA_MAX, D_LOW, D_HIGH, PREDICT_TIME, human_pose_predict_scales, HUMAN_POSE_PREDICT_ANGLE);
 
         return true;
     }
 
     void ContextCostFunction::setParams(double alpha_max, double d_low, double d_high,
-        double predict_time, std::vector<double> human_pose_predict_scales)
+        double predict_time, std::vector<double> human_pose_predict_scales,
+        double human_pose_predict_angle)
     {
         alpha_max_ = alpha_max;
         d_low_ = d_low;
         d_high_ = d_high;
         predict_time_ = predict_time;
         human_pose_predict_scales_ = human_pose_predict_scales;
+        human_pose_predict_angle_ = human_pose_predict_angle;
 
         ROS_DEBUG_NAMED("context_cost_function", "context-cost function parameters set: "
         "alpha_max=%f, d_low=%f, d_high=:%f, predict_time=%f, human_pose_predict_scales=[%f, %f, %f]",
@@ -157,12 +160,23 @@ namespace hanp_local_planner
 
     std::vector<human_pose> ContextCostFunction::predictHumanPoses(hanp_msgs::TrackedHuman& human)
     {
-        std::vector<human_pose> future_human_poses;
+        tf::Vector3 linear_vel(human.twist.twist.linear.x, human.twist.twist.linear.y, human.twist.twist.linear.z);
+
+        // calculate variations in velocity of human
+        std::vector<tf::Vector3> vel_variations;
         for(auto vel_scale : human_pose_predict_scales_)
         {
+            vel_variations.push_back(linear_vel.rotate(tf::Vector3(0, 0, 1), human_pose_predict_angle_) * vel_scale);
+            vel_variations.push_back(linear_vel.rotate(tf::Vector3(0, 0, 1), -human_pose_predict_angle_) * vel_scale);
+        }
+
+        // calculate future human poses based on velocity variations
+        std::vector<human_pose> future_human_poses;
+        for(auto vel : vel_variations)
+        {
             future_human_poses.push_back({
-                human.pose.pose.position.x + (human.twist.twist.linear.x * vel_scale) * predict_time_,
-                human.pose.pose.position.y + (human.twist.twist.linear.y * vel_scale) * predict_time_,
+                human.pose.pose.position.x + vel[0] * predict_time_,
+                human.pose.pose.position.y + vel[1] * predict_time_,
                 tf::getYaw(human.pose.pose.orientation)});
 
             // ROS_DEBUG_NAMED("context_cost_function", "predected human (%d) pose: x=%f, y=%f, theta=%f with vel sclae %f",

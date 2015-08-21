@@ -122,7 +122,8 @@ namespace hanp_local_planner
 
         context_cost_function_->setParams(config.cc_alpha_max, config.cc_d_low,
             config.cc_d_high, config.sim_time, {config.cc_human_predict_scale_lower,
-            config.cc_human_predict_scale_nominal, config.cc_human_predict_scale_higher});
+            config.cc_human_predict_scale_nominal, config.cc_human_predict_scale_higher},
+            config.cc_human_predict_angle);
 
         int vx_samp, vy_samp, vth_samp;
         vx_samp = config.vx_samples;
