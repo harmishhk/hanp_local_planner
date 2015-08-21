@@ -146,6 +146,7 @@ namespace hanp_local_planner
         bool publish_traj_pc_;
         double cheat_factor_;
         double point_head_height_;
+        double path_clearning_distance_squared_;
 
         ros::Subscriber humans_sub_;
         hanp_msgs::TrackedHumans tracked_humans_;

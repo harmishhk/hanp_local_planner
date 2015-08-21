@@ -35,9 +35,6 @@
 * Author: Eitan Marder-Eppstein
 *********************************************************************/
 
-// dynamically reconfigurable parameters
-#define POINT_HEAD_HEGIHT 1.5 // meters
-
 // parameters configurable at start
 #define PLANNING_FRAME "odom"
 #define ROBOT_BASE_FRAME "base_link"
@@ -103,6 +100,7 @@ namespace hanp_local_planner
 
         double resolution = planner_util_.getCostmap()->getResolution();
         pdist_scale_ = config.path_distance_bias;
+        path_clearning_distance_squared_ = config.path_clearning_distance * config.path_clearning_distance;
         path_costs_->setScale(resolution * pdist_scale_ * 0.5);
         alignment_costs_->setScale(resolution * pdist_scale_ * 0.5);
 
@@ -554,13 +552,34 @@ namespace hanp_local_planner
             global_plan_[i] = new_plan[i];
         }
 
-        path_costs_->setTargetPoses(global_plan_);
+        Eigen::Vector3f pos(global_pose.getOrigin().getX(), global_pose.getOrigin().getY(), tf::getYaw(global_pose.getRotation()));
+
+        // remove already traversed points from global plan to calculate path costs
+        unsigned int remove_index = 0;
+        for(auto global_plan_pose : global_plan_)
+        {
+            auto sq_dist = (pos[0] - global_plan_pose.pose.position.x) * (pos[0] - global_plan_pose.pose.position.x) +
+                (pos[1] - global_plan_pose.pose.position.y) * (pos[1] - global_plan_pose.pose.position.y);
+
+            if (sq_dist > path_clearning_distance_squared_)
+            {
+                remove_index++;
+            }
+            else
+            {
+                break;
+            }
+        }
+        std::vector<geometry_msgs::PoseStamped> remaining_global_plan(global_plan_.begin() + remove_index, global_plan_.end());
+
+        ROS_DEBUG_NAMED("hanp_local_planner", "hanp_local_planner: discarded first %d (from %d)"
+            " points from global plan for path-distance costs", remove_index, global_plan_.size());
+        path_costs_->setTargetPoses(remaining_global_plan);
 
         goal_costs_->setTargetPoses(global_plan_);
 
         geometry_msgs::PoseStamped goal_pose = global_plan_.back();
 
-        Eigen::Vector3f pos(global_pose.getOrigin().getX(), global_pose.getOrigin().getY(), tf::getYaw(global_pose.getRotation()));
         double sq_dist = (pos[0] - goal_pose.pose.position.x) * (pos[0] - goal_pose.pose.position.x) +
             (pos[1] - goal_pose.pose.position.y) * (pos[1] - goal_pose.pose.position.y);
 
