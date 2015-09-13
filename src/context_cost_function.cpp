@@ -27,78 +27,98 @@
  *                                  Harmish Khambhaita on Wed Jul 29 2015
  */
 
-// context-cost related parameters
+// defining constants
+#define PREDICTD_HUMAN_PUB_TOPIC "predicted_human_poses"
+#define PREDICT_SERVICE_NAME "/human_pose_prediction/predict_2d_human_poses"
+
 #define ALPHA_MAX 2.09 // (2*M_PI/3) radians, angle between robot heading and inverse of human heading
 #define D_LOW 0.7 // meters, minimum distance for compatibility measure
 #define D_HIGH 10.0 // meters, maximum distance for compatibility measure
 #define PREDICT_TIME 2.0 // seconds, time for predicting human and robot position, before checking compatibility
-#define HUMAN_POSE_PREDICT_LOWER_SCALE 0.8 // human slow-down velocity multiplier
-#define HUMAN_POSE_PREDICT_HIGHER_SCALE 1.2 // human speed-up velocity multiplier
-#define HUMAN_POSE_PREDICT_ANGLE 0.1 // deviation angle for human position predictions
+
+#define MESSAGE_THROTTLE_PERIOD 4.0 // seconds
 
 #include <hanp_local_planner/context_cost_function.h>
 
 namespace hanp_local_planner
 {
     // empty constructor and destructor
-    ContextCostFunction::ContextCostFunction()
+    ContextCostFunction::ContextCostFunction() {}
+    ContextCostFunction::~ContextCostFunction() {}
+
+    void ContextCostFunction::initialize(std::string global_frame, tf::TransformListener* tf)
     {
+        ros::NodeHandle private_nh("~/");
+        predict_humans_client_ = private_nh.serviceClient<hanp_prediction::HumanPosePredict>(PREDICT_SERVICE_NAME);
+
         if(publish_predicted_human_markers_)
         {
-            ros::NodeHandle private_nh("~/");
-            predict_human_pub_ = private_nh.advertise<visualization_msgs::MarkerArray>("predicted_human_poses", 1);
+            predict_human_pub_ = private_nh.advertise<visualization_msgs::MarkerArray>(PREDICTD_HUMAN_PUB_TOPIC, 1);
         }
+
+        // initialize variables
+        global_frame_ = global_frame;
+        tf_ = tf;
     }
-    ContextCostFunction::~ContextCostFunction() {}
 
     bool ContextCostFunction::prepare()
     {
         // set default parameters
-        std::vector<double> human_pose_predict_scales = {HUMAN_POSE_PREDICT_LOWER_SCALE, 1.0, HUMAN_POSE_PREDICT_HIGHER_SCALE};
-        setParams(ALPHA_MAX, D_LOW, D_HIGH, PREDICT_TIME, human_pose_predict_scales, HUMAN_POSE_PREDICT_ANGLE);
+        setParams(ALPHA_MAX, D_LOW, D_HIGH, PREDICT_TIME);
 
         return true;
     }
 
-    void ContextCostFunction::setParams(double alpha_max, double d_low, double d_high,
-        double predict_time, std::vector<double> human_pose_predict_scales,
-        double human_pose_predict_angle)
+    void ContextCostFunction::setParams(double alpha_max, double d_low,
+        double d_high, double predict_time)
     {
         alpha_max_ = alpha_max;
         d_low_ = d_low;
         d_high_ = d_high;
         predict_time_ = predict_time;
-        human_pose_predict_scales_ = human_pose_predict_scales;
-        human_pose_predict_angle_ = human_pose_predict_angle;
 
         ROS_DEBUG_NAMED("context_cost_function", "context-cost function parameters set: "
-        "alpha_max=%f, d_low=%f, d_high=:%f, predict_time=%f, human_pose_predict_scales=[%f, %f, %f]",
-        alpha_max_, d_low_, d_high_, predict_time_, human_pose_predict_scales_[0],
-        human_pose_predict_scales_[1], human_pose_predict_scales_[2]);
+        "alpha_max=%f, d_low=%f, d_high=:%f, predict_time=%f",
+        alpha_max_, d_low_, d_high_, predict_time_);
     }
 
     // abuse this function to give sclae with with the trajectory should be truncated
     double ContextCostFunction::scoreTrajectory(base_local_planner::Trajectory &traj)
     {
-        // copy humans for thread safety
-        auto humans = humans_;
-
-        // temporary variables for future robot pose, and compatibility
-        double rx, ry, rtheta, d_p, alpha, compatibility;
-        auto point_index_max = traj.getPointsSize();
-
         // TODO: discard humans, if information is too old
+        // TODO: discard humans who are behind the robot
+
+        hanp_prediction::HumanPosePredict predict_srv;
+        predict_srv.request.predict_time = predict_time_;
+        if(!predict_humans_client_.call(predict_srv))
+        {
+            ROS_DEBUG_THROTTLE_NAMED(MESSAGE_THROTTLE_PERIOD, "context_cost_function",
+                "failed to call %s service, is prediction server running?", PREDICT_SERVICE_NAME);
+            return 1.0;
+        }
+
+        ROS_DEBUG_NAMED("context_cost_function", "received %d predicted humans",
+            predict_srv.response.predicted_humans.size());
+
+        // transform humans
+        std::vector<hanp_prediction::PredictedPoses> transformed_humans;
+        for (auto human : predict_srv.response.predicted_humans)
+        {
+            transformed_humans.push_back(transformHumanPoses(human, predict_srv.response.header.frame_id));
+        }
+        ROS_DEBUG_NAMED("context_cost_function", "transformied %d humans to %s frame",
+            transformed_humans.size(), global_frame_.c_str());
 
         if(publish_predicted_human_markers_)
         {
             predicted_humans_markers_.markers.clear();
 
-            for(auto human: humans.tracks)
+            for(auto transformed_human : transformed_humans)
             {
                 visualization_msgs::Marker predicted_human;
-                predicted_human.header.frame_id = humans.header.frame_id;
+                predicted_human.header.frame_id = global_frame_;
                 predicted_human.header.stamp = ros::Time();
-                predicted_human.id = human.track_id;
+                predicted_human.id = transformed_human.track_id;
                 predicted_human.type = visualization_msgs::Marker::SPHERE_LIST;
                 predicted_human.action = visualization_msgs::Marker::MODIFY;
                 predicted_human.scale.x = 0.1;
@@ -109,26 +129,29 @@ namespace hanp_local_planner
                 predicted_human.color.g = 1.0;
                 predicted_human.color.b = 0.0;
 
-                for(auto future_human_pose : predictHumanPoses(human))
+                for(auto transformed_human_pose : transformed_human.poses)
                 {
-                    geometry_msgs::Point future_human_point;
-                    future_human_point.x = future_human_pose[0];
-                    future_human_point.y = future_human_pose[1];
-                    predicted_human.points.push_back(future_human_point);
+                    geometry_msgs::Point predicted_human_point;
+                    predicted_human_point.x = transformed_human_pose.x;
+                    predicted_human_point.y = transformed_human_pose.y;
+                    predicted_human.points.push_back(predicted_human_point);
                 }
 
                 predicted_humans_markers_.markers.push_back(predicted_human);
             }
 
             predict_human_pub_.publish(predicted_humans_markers_);
+
+            ROS_DEBUG_NAMED("context_cost_function", "published predicted humans");
         }
 
-        for(auto human : humans.tracks)
-        {
-            // TODO: discard humans who are behind the robot
+        // temporary variables for future robot pose, and compatibility
+        double rx, ry, rtheta, d_p, alpha, compatibility;
+        auto point_index_max = traj.getPointsSize();
 
-            // predict human position, for three speed possibilities
-            for(auto future_human_pose : predictHumanPoses(human))
+        for(auto transformed_human : transformed_humans)
+        {
+            for(auto future_human_pose : transformed_human.poses)
             {
                 unsigned int point_index = 0;
                 do
@@ -137,13 +160,13 @@ namespace hanp_local_planner
                     traj.getPoint(point_index, rx, ry, rtheta);
 
                     // calculate distance of robot to person
-                    d_p = hypot(rx - future_human_pose[0], ry - future_human_pose[1]);
+                    d_p = hypot(rx - future_human_pose.x, ry - future_human_pose.y);
                     // ROS_DEBUG_NAMED("context_cost_function", "rx=%f, ry=%f, hx=%f, hy=%f, d_p=%f",
-                    // rx, ry, future_human_pose[0], future_human_pose[1], d_p);
+                    // rx, ry, future_human_pose.x, future_human_pose.y, d_p);
                     alpha = fabs(angles::shortest_angular_distance(rtheta,
-                        angles::normalize_angle_positive(future_human_pose[2]) - M_PI));
+                        angles::normalize_angle_positive(future_human_pose.theta) - M_PI));
                     // ROS_DEBUG_NAMED("context_cost_function", "rtheta=%f, h_inv_theta=%f, alpha=%f",
-                    // rtheta, angles::normalize_angle_positive(future_human_pose[2]) - M_PI, alpha);
+                    // rtheta, angles::normalize_angle_positive(future_human_pose.theta) - M_PI, alpha);
 
                     // check compatibility
                     compatibility = getCompatabilty(d_p, alpha);
@@ -158,7 +181,7 @@ namespace hanp_local_planner
 
                 // ROS_DEBUG_NAMED("context_cost_function", "calculated maximum point index %d"
                 //     " (out of %d) for human at x=%d, y=%f", point_index_max, traj.getPointsSize(),
-                //     future_human_pose[0], future_human_pose[1]);
+                //     future_human_pose.x, future_human_pose.y);
 
                 // no need to check more when we have to stop
                 if (point_index_max == 1)
@@ -172,11 +195,6 @@ namespace hanp_local_planner
         ROS_DEBUG_NAMED("context_cost_function", "returning scale value of %f", scaling);
 
         return scaling;
-    }
-
-    void ContextCostFunction::updateTrackedHumans(const hanp_msgs::TrackedHumans& tracked_humans)
-    {
-        humans_ = tracked_humans;
     }
 
     double ContextCostFunction::getCompatabilty(double d_p, double alpha)
@@ -199,32 +217,57 @@ namespace hanp_local_planner
         }
     }
 
-    std::vector<human_pose> ContextCostFunction::predictHumanPoses(hanp_msgs::TrackedHuman& human)
+    hanp_prediction::PredictedPoses ContextCostFunction::transformHumanPoses(
+        hanp_prediction::PredictedPoses& predicted_human, std::string frame_id)
     {
-        tf::Vector3 linear_vel(human.twist.twist.linear.x, human.twist.twist.linear.y, human.twist.twist.linear.z);
-
-        // calculate variations in velocity of human
-        std::vector<tf::Vector3> vel_variations;
-        for(auto vel_scale : human_pose_predict_scales_)
+        if(global_frame_ != frame_id)
         {
-            vel_variations.push_back(linear_vel.rotate(tf::Vector3(0, 0, 1), human_pose_predict_angle_) * vel_scale);
-            vel_variations.push_back(linear_vel.rotate(tf::Vector3(0, 0, 1), -human_pose_predict_angle_) * vel_scale);
-        }
+            hanp_prediction::PredictedPoses transformed_human;
 
-        // calculate future human poses based on velocity variations
-        std::vector<human_pose> future_human_poses;
-        for(auto vel : vel_variations)
+            //transform human pose in global frame
+            int res;
+            try
+            {
+                std::string error_msg;
+                res = tf_->waitForTransform(global_frame_, frame_id,
+                    ros::Time(0), ros::Duration(0.5), ros::Duration(0.01), &error_msg);
+                tf::StampedTransform humans_to_global_transform;
+                tf_->lookupTransform(global_frame_, frame_id, ros::Time(0), humans_to_global_transform);
+
+                for(auto predicted_pose : predicted_human.poses)
+                {
+                    // transform position
+                    geometry_msgs::Pose human_transformed;
+                    tf::Pose human_pose(tf::Quaternion(predicted_pose.theta, 0, 0),
+                        tf::Vector3(predicted_pose.x, predicted_pose.y, 0));
+                    tf::poseTFToMsg(humans_to_global_transform * human_pose, human_transformed);
+
+                    geometry_msgs::Pose2D transformed_pose;
+                    transformed_pose.x = human_transformed.position.x;
+                    transformed_pose.y = human_transformed.position.y;
+                    transformed_pose.theta = tf::getYaw(human_transformed.orientation);
+                    transformed_human.poses.push_back(transformed_pose);
+
+                    ROS_DEBUG_NAMED("context_cost_function", "transformed human pose"
+                    " to %s frame, resulting pose: x=%f, y=%f theta=%f",
+                    global_frame_.c_str(), transformed_pose.x, transformed_pose.y, transformed_pose.theta);
+                }
+                transformed_human.track_id = predicted_human.track_id;
+            }
+            catch(const tf::ExtrapolationException &ex)
+            {
+                ROS_DEBUG("context_cost_function: cannot extrapolate transform");
+            }
+            catch(const tf::TransformException &ex)
+            {
+                ROS_ERROR("context_cost_function: transform failure (%d): %s", res, ex.what());
+            }
+
+            return transformed_human;
+        }
+        else
         {
-            future_human_poses.push_back({
-                human.pose.pose.position.x + vel[0] * predict_time_,
-                human.pose.pose.position.y + vel[1] * predict_time_,
-                tf::getYaw(human.pose.pose.orientation)});
-
-            // ROS_DEBUG_NAMED("context_cost_function", "predected human (%d) pose: x=%f, y=%f, theta=%f with vel sclae %f",
-            //     human.track_id, future_human_poses.back()[0], future_human_poses.back()[1],
-            //     future_human_poses.back()[2], vel_scale);
+            return predicted_human;
         }
-
-        return future_human_poses;
     }
 }
