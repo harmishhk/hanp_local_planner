@@ -31,9 +31,9 @@
 #define CONTEXT_COST_FUNCTION_H_
 
 #include <base_local_planner/trajectory_cost_function.h>
-#include <hanp_msgs/TrackedHumans.h>
 #include <tf/transform_listener.h>
 #include <angles/angles.h>
+#include <hanp_prediction/HumanPosePredict.h>
 
 namespace hanp_local_planner {
 
@@ -45,28 +45,25 @@ namespace hanp_local_planner {
         ContextCostFunction();
         ~ContextCostFunction();
 
+        void initialize(std::string global_frame, tf::TransformListener* tf);
         bool prepare();
         double scoreTrajectory(base_local_planner::Trajectory &traj);
 
-        void updateTrackedHumans(const hanp_msgs::TrackedHumans& tracked_humans);
-
-        void setParams(double alpha_max, double d_low, double d_high,
-            double predict_time, std::vector<double> human_pose_predict_scales,
-            double human_pose_predict_angle);
+        void setParams(double alpha_max, double d_low, double d_high, double predict_time);
 
     private:
+        ros::ServiceClient predict_humans_client_;
+
+        tf::TransformListener* tf_;
+
         double alpha_max_, d_low_, d_high_;
         double predict_time_;
+        std::string global_frame_;
 
-        hanp_msgs::TrackedHumans humans_;
-
-        std::vector<human_pose> predictHumanPoses(hanp_msgs::TrackedHuman& human);
         double getCompatabilty(double d_p, double alpha);
 
-        std::vector<double> human_pose_predict_scales_;
-        double  human_pose_predict_angle_;
+        hanp_prediction::PredictedPoses transformHumanPoses(hanp_prediction::PredictedPoses&, std::string frame_id);
     };
-
 }
 
 #endif // CONTEXT_COST_FUNCTION_H_

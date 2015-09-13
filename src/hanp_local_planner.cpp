@@ -121,9 +121,7 @@ namespace hanp_local_planner
         prefer_forward_costs_->setPenalty(config.backward_motion_penalty);
 
         context_cost_function_->setParams(config.cc_alpha_max, config.cc_d_low,
-            config.cc_d_high, config.sim_time, {config.cc_human_predict_scale_lower,
-            config.cc_human_predict_scale_nominal, config.cc_human_predict_scale_higher},
-            config.cc_human_predict_angle);
+            config.cc_d_high, config.sim_time);
 
         int vx_samp, vy_samp, vth_samp;
         vx_samp = config.vx_samples;
@@ -185,6 +183,7 @@ namespace hanp_local_planner
             prefer_forward_costs_ = new base_local_planner::PreferForwardCostFunction(0.0);
 
             context_cost_function_ =  new hanp_local_planner::ContextCostFunction();
+            context_cost_function_->initialize(planner_util_.getGlobalFrame(), tf);
 
             goal_front_costs_->setStopOnFailure( false );
             alignment_costs_->setStopOnFailure( false );
@@ -249,9 +248,6 @@ namespace hanp_local_planner
             }
 
             private_nh.param("robot_base_frame", robot_base_frame_, std::string(ROBOT_BASE_FRAME));
-
-            // subscribe to humans position updates
-            humans_sub_ = private_nh.subscribe(HUMAN_SUB_TOPIC, 1, &HANPLocalPlanner::trackedHumansCB, this);
 
             initialized_ = true;
 
@@ -678,84 +674,5 @@ namespace hanp_local_planner
         }
 
         return result_traj_;
-    }
-
-    void HANPLocalPlanner::trackedHumansCB(const hanp_msgs::TrackedHumans& tracked_humans)
-    {
-        // get tracked humans pointer locally for thread safety
-        auto humans = tracked_humans;
-
-        if(planner_util_.getGlobalFrame() != humans.header.frame_id)
-        {
-            hanp_msgs::TrackedHumans humans_transformed;
-
-            if(humans.tracks.size() > 0)
-            {
-                //transform human pose in global frame
-                int res;
-                try
-                {
-                    std::string error_msg;
-                    res = tf_->waitForTransform(planner_util_.getGlobalFrame(), humans.header.frame_id,
-                        ros::Time(0), ros::Duration(0.5), ros::Duration(0.01), &error_msg);
-                    tf::StampedTransform humans_to_global_transform;
-                    tf_->lookupTransform(planner_util_.getGlobalFrame(), humans.header.frame_id,
-                        ros::Time(0), humans_to_global_transform);
-                    geometry_msgs::Twist human_twist_in_global;
-                    tf_->lookupTwist(humans.header.frame_id, planner_util_.getGlobalFrame(),
-                        ros::Time(0), ros::Duration(0.1), human_twist_in_global);
-
-                    for(auto human : humans.tracks)
-                    {
-                        hanp_msgs::TrackedHuman human_transformed;
-                        // transform position
-                        tf::Pose human_pose;
-                        tf::poseMsgToTF(human.pose.pose, human_pose);
-                        tf::poseTFToMsg(humans_to_global_transform * human_pose, human_transformed.pose.pose);
-
-                        // transfrom velocities, which is just rotating the velocity vector
-                        tf::Vector3 linear_vel, angular_vel;
-                        tf::vector3MsgToTF(human.twist.twist.linear, linear_vel);
-                        tf::vector3MsgToTF(human.twist.twist.angular, angular_vel);
-                        humans_to_global_transform.setOrigin(tf::Vector3(0.0, 0.0, 0.0));
-                        tf::vector3TFToMsg(humans_to_global_transform * linear_vel, human_transformed.twist.twist.linear);
-                        tf::vector3TFToMsg(humans_to_global_transform * angular_vel, human_transformed.twist.twist.angular);
-
-                        // in case, human_tracking frame is also moving with respect to planning frame
-                        human_transformed.twist.twist.linear.x += human_twist_in_global.linear.x;
-                        human_transformed.twist.twist.linear.y += human_twist_in_global.linear.y;
-                        human_transformed.twist.twist.linear.z += human_twist_in_global.linear.z;
-                        human_transformed.twist.twist.angular.x += human_twist_in_global.angular.x;
-                        human_transformed.twist.twist.angular.y += human_twist_in_global.angular.y;
-                        human_transformed.twist.twist.angular.z += human_twist_in_global.angular.z;
-
-                        humans_transformed.tracks.push_back(human_transformed);
-
-                        // ROS_DEBUG_NAMED("hanp_local_planner", "transformed human to %s frame,"
-                        // " resulting pose: x=%f, y=%f theta=%f, linvel: x=%f, y=%f, angvel z=%f",
-                        // planner_util_.getGlobalFrame().c_str(), human_transformed.pose.pose.position.x,
-                        // human_transformed.pose.pose.position.y, tf::getYaw(human_transformed.pose.pose.orientation),
-                        // human_transformed.twist.twist.linear.x, human_transformed.twist.twist.linear.y,
-                        // human_transformed.twist.twist.angular.z);
-                    }
-                }
-                catch(const tf::ExtrapolationException &ex)
-                {
-                    ROS_DEBUG("hanp_local_planner: cannot extrapolate transform");
-                }
-                catch(const tf::TransformException &ex)
-                {
-                    ROS_ERROR("hanp_local_planner: transform failure (%d): %s", res, ex.what());
-                }
-            }
-            humans_transformed.header.stamp = humans.header.stamp;
-            humans_transformed.header.frame_id = planner_util_.getGlobalFrame();
-
-            context_cost_function_->updateTrackedHumans(humans_transformed);
-        }
-        else
-        {
-            context_cost_function_->updateTrackedHumans(humans);
-        }
     }
 };

@@ -21,7 +21,7 @@ find_package(catkin REQUIRED COMPONENTS
   costmap_2d
   dynamic_reconfigure
   geometry_msgs
-  hanp_msgs
+  hanp_prediction
   nav_core
   nav_msgs
   pluginlib
@@ -75,7 +75,7 @@ catkin_package(
     costmap_2d
     dynamic_reconfigure
     geometry_msgs
-    hanp_msgs
+    hanp_prediction
     nav_core
     nav_msgs
     pluginlib
