@@ -107,7 +107,6 @@ namespace hanp_local_planner
 
         void reconfigureCB(HANPLocalPlannerConfig &config, uint32_t level);
 
-        void publishPointHead(geometry_msgs::PointStamped& point_head);
         void publishLocalPlan(std::vector<geometry_msgs::PoseStamped>& path);
         void publishGlobalPlan(std::vector<geometry_msgs::PoseStamped>& path);
 
@@ -124,9 +123,8 @@ namespace hanp_local_planner
         dynamic_reconfigure::Server<HANPLocalPlannerConfig> *dsrv_;
         hanp_local_planner::HANPLocalPlannerConfig default_config_;
 
-        ros::Publisher g_plan_pub_, l_plan_pub_, point_head_pub_;
+        ros::Publisher g_plan_pub_, l_plan_pub_;
         std::string odom_topic_;
-        std::string robot_base_frame_;
 
         tf::Stamped<tf::Pose> current_pose_;
 
@@ -142,7 +140,6 @@ namespace hanp_local_planner
         bool publish_cost_grid_pc_;
         bool publish_traj_pc_;
         double cheat_factor_;
-        double point_head_height_;
         double path_clearning_distance_squared_;
 
         base_local_planner::LatchedStopRotateController latchedStopRotateController_;

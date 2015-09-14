@@ -37,7 +37,6 @@
 
 // parameters configurable at start
 #define PLANNING_FRAME "odom"
-#define ROBOT_BASE_FRAME "base_link"
 #define HUMAN_SUB_TOPIC "humans"
 
 #include <hanp_local_planner/hanp_local_planner.h>
@@ -152,8 +151,6 @@ namespace hanp_local_planner
         vsamples_[0] = vx_samp;
         vsamples_[1] = vy_samp;
         vsamples_[2] = vth_samp;
-
-        point_head_height_ = config.point_head_height;
     }
 
     HANPLocalPlanner::HANPLocalPlanner() : initialized_(false), odom_helper_(PLANNING_FRAME), setup_(false) { }
@@ -165,7 +162,6 @@ namespace hanp_local_planner
             ros::NodeHandle private_nh("~/" + name);
             g_plan_pub_ = private_nh.advertise<nav_msgs::Path>("global_plan", 1);
             l_plan_pub_ = private_nh.advertise<nav_msgs::Path>("local_plan", 1);
-            point_head_pub_ = private_nh.advertise<geometry_msgs::PointStamped>("point_head", 1);
             tf_ = tf;
             costmap_ros_ = costmap_ros;
             costmap_ros_->getRobotPose(current_pose_);
@@ -247,8 +243,6 @@ namespace hanp_local_planner
                 odom_helper_.setOdomTopic( odom_topic_ );
             }
 
-            private_nh.param("robot_base_frame", robot_base_frame_, std::string(ROBOT_BASE_FRAME));
-
             initialized_ = true;
 
             dsrv_ = new dynamic_reconfigure::Server<HANPLocalPlannerConfig>(private_nh);
@@ -292,14 +286,15 @@ namespace hanp_local_planner
 
         if(latchedStopRotateController_.isGoalReached(&planner_util_, odom_helper_, current_pose_))
         {
-            // look at front of the robot when goal reached
-            geometry_msgs::PointStamped point_head;
-            point_head.header.stamp = ros::Time::now();
-            point_head.header.frame_id = robot_base_frame_;
-            point_head.point.x = 1.0;
-            point_head.point.y = 0.0;
-            point_head.point.z = point_head_height_;
-            publishPointHead(point_head);
+            // publish last plan with one point same as current robot pose
+            std::vector<geometry_msgs::PoseStamped> local_plan;
+            tf::Stamped<tf::Pose> p = tf::Stamped<tf::Pose>(tf::Pose(
+                current_pose_.getRotation(), current_pose_.getOrigin()),
+                ros::Time::now(), costmap_ros_->getGlobalFrameID());
+            geometry_msgs::PoseStamped pose;
+            tf::poseStampedTFToMsg(p, pose);
+            local_plan.push_back(pose);
+            publishLocalPlan(local_plan);
 
             ROS_INFO("Goal reached");
             return true;
@@ -318,12 +313,6 @@ namespace hanp_local_planner
     void HANPLocalPlanner::publishGlobalPlan(std::vector<geometry_msgs::PoseStamped>& path)
     {
         base_local_planner::publishPlan(path, g_plan_pub_);
-    }
-
-    void HANPLocalPlanner::publishPointHead(geometry_msgs::PointStamped& point_head)
-    {
-        ROS_DEBUG("heading point: x=%f, y=%f, frame=%s", point_head.point.x, point_head.point.y, point_head.header.frame_id.c_str());
-        point_head_pub_.publish(point_head);
     }
 
     HANPLocalPlanner::~HANPLocalPlanner()
@@ -374,14 +363,6 @@ namespace hanp_local_planner
             local_plan.clear();
             publishLocalPlan(local_plan);
 
-            // look in the front of the robot in case of failure
-            geometry_msgs::PointStamped point_head;
-            point_head.header.stamp = ros::Time::now();
-            point_head.header.frame_id = robot_base_frame_;
-            point_head.point.x = 1.0;
-            point_head.point.y = 0.0;
-            point_head.point.z = point_head_height_;
-            publishPointHead(point_head);
             return false;
         }
 
@@ -421,22 +402,6 @@ namespace hanp_local_planner
         }
 
         publishLocalPlan(local_plan);
-
-        // look at the end of the local plan
-        if(local_plan.size() > 0)
-        {
-            tf::Pose local_plan_end;
-            tf::poseMsgToTF(local_plan.back().pose, local_plan_end);
-            auto local_plan_end_extended = local_plan_end(tf::Vector3(0.5,0,0));
-            geometry_msgs::PointStamped point_head;
-            point_head.header.stamp = ros::Time::now();
-            point_head.header.frame_id = local_plan.back().header.frame_id;
-            point_head.point.x = local_plan_end_extended.x();
-            point_head.point.y = local_plan_end_extended.y();
-            point_head.point.z = point_head_height_;
-            publishPointHead(point_head);
-        }
-
         return true;
     }
 
@@ -467,25 +432,29 @@ namespace hanp_local_planner
         {
             std::vector<geometry_msgs::PoseStamped> local_plan;
             std::vector<geometry_msgs::PoseStamped> transformed_plan;
+
+            base_local_planner::LocalPlannerLimits limits = planner_util_.getCurrentLimits();
+            auto local_plan_found = latchedStopRotateController_.computeVelocityCommandsStopRotate(cmd_vel,
+                limits.getAccLimits(), sim_period_, &planner_util_, odom_helper_,
+                current_pose_, boost::bind(&HANPLocalPlanner::checkTrajectory, this, _1, _2, _3));
+
+            if(local_plan_found)
+            {
+                // add final goal direction with current pose to local plan
+                tf::Stamped<tf::Pose> goal_pose;
+                planner_util_.getGoal(goal_pose);
+                tf::Stamped<tf::Pose> p = tf::Stamped<tf::Pose>(tf::Pose(
+                    goal_pose.getRotation(), current_pose_.getOrigin()),
+                    ros::Time::now(), costmap_ros_->getGlobalFrameID());
+                geometry_msgs::PoseStamped pose;
+                tf::poseStampedTFToMsg(p, pose);
+                local_plan.push_back(pose);
+            }
+
             publishGlobalPlan(transformed_plan);
             publishLocalPlan(local_plan);
 
-            // look at the final goal when position is reached
-            tf::Stamped<tf::Pose> goal_pose;
-            planner_util_.getGoal(goal_pose);
-            geometry_msgs::PointStamped point_head;
-            point_head.header.stamp = ros::Time::now();
-            point_head.header.frame_id = goal_pose.frame_id_;
-            auto goal_pose_front = goal_pose(tf::Vector3(1.0 , 0.0, 0.0));
-            point_head.point.x = goal_pose_front.x();
-            point_head.point.y = goal_pose_front.y();
-            point_head.point.z = point_head_height_;
-            publishPointHead(point_head);
-
-            base_local_planner::LocalPlannerLimits limits = planner_util_.getCurrentLimits();
-            return latchedStopRotateController_.computeVelocityCommandsStopRotate(cmd_vel,
-                limits.getAccLimits(), sim_period_, &planner_util_, odom_helper_,
-                current_pose_, boost::bind(&HANPLocalPlanner::checkTrajectory, this, _1, _2, _3));
+            return local_plan_found;
         }
         else
         {
