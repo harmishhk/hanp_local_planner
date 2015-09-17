@@ -289,8 +289,8 @@ namespace hanp_local_planner
             // publish last plan with one point same as current robot pose
             std::vector<geometry_msgs::PoseStamped> local_plan;
             tf::Stamped<tf::Pose> p = tf::Stamped<tf::Pose>(tf::Pose(
-                current_pose_.getRotation(), current_pose_.getOrigin()),
-                ros::Time::now(), costmap_ros_->getGlobalFrameID());
+                tf::createQuaternionFromYaw(0), tf::Point(0.0, 0.0, 0.0)),
+                ros::Time::now(), costmap_ros_->getBaseFrameID());
             geometry_msgs::PoseStamped pose;
             tf::poseStampedTFToMsg(p, pose);
             local_plan.push_back(pose);
