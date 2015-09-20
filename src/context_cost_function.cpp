@@ -84,7 +84,8 @@ namespace hanp_local_planner
         // TODO: discard humans who are behind the robot
 
         hanp_prediction::HumanPosePredict predict_srv;
-        predict_srv.request.predict_time = predict_time_;
+        predict_srv.request.predict_times.push_back(predict_time_);
+        predict_srv.request.type = hanp_prediction::HumanPosePredictRequest::VELOCITY_SCALE;
         if(!predict_humans_client_.call(predict_srv))
         {
             ROS_DEBUG_THROTTLE_NAMED(MESSAGE_THROTTLE_PERIOD, "context_cost_function",
@@ -119,13 +120,13 @@ namespace hanp_local_planner
                     traj.getPoint(point_index, rx, ry, rtheta);
 
                     // calculate distance of robot to person
-                    d_p = hypot(rx - future_human_pose.x, ry - future_human_pose.y);
+                    d_p = hypot(rx - future_human_pose.pose2d.x, ry - future_human_pose.pose2d.y);
                     // ROS_DEBUG_NAMED("context_cost_function", "rx=%f, ry=%f, hx=%f, hy=%f, d_p=%f",
-                    // rx, ry, future_human_pose.x, future_human_pose.y, d_p);
+                    // rx, ry, future_human_pose.pose2d.x, future_human_pose.pose2d.y, d_p);
                     alpha = fabs(angles::shortest_angular_distance(rtheta,
-                        angles::normalize_angle_positive(future_human_pose.theta) - M_PI));
+                        angles::normalize_angle_positive(future_human_pose.pose2d.theta) - M_PI));
                     // ROS_DEBUG_NAMED("context_cost_function", "rtheta=%f, h_inv_theta=%f, alpha=%f",
-                    // rtheta, angles::normalize_angle_positive(future_human_pose.theta) - M_PI, alpha);
+                    // rtheta, angles::normalize_angle_positive(future_human_pose.pose2d.theta) - M_PI, alpha);
 
                     // check compatibility
                     compatibility = getCompatabilty(d_p, alpha);
@@ -140,7 +141,7 @@ namespace hanp_local_planner
 
                 // ROS_DEBUG_NAMED("context_cost_function", "calculated maximum point index %d"
                 //     " (out of %d) for human at x=%d, y=%f", point_index_max, traj.getPointsSize(),
-                //     future_human_pose.x, future_human_pose.y);
+                //     future_human_pose.pose2d.x, future_human_pose.pose2d.y);
 
                 // no need to check more when we have to stop
                 if (point_index_max == 1)
@@ -197,19 +198,21 @@ namespace hanp_local_planner
                 {
                     // transform position
                     geometry_msgs::Pose human_transformed;
-                    tf::Pose human_pose(tf::Quaternion(predicted_pose.theta, 0, 0),
-                        tf::Vector3(predicted_pose.x, predicted_pose.y, 0));
+                    tf::Pose human_pose(tf::Quaternion(predicted_pose.pose2d.theta, 0, 0),
+                        tf::Vector3(predicted_pose.pose2d.x, predicted_pose.pose2d.y, 0));
                     tf::poseTFToMsg(humans_to_global_transform * human_pose, human_transformed);
 
-                    geometry_msgs::Pose2D transformed_pose;
-                    transformed_pose.x = human_transformed.position.x;
-                    transformed_pose.y = human_transformed.position.y;
-                    transformed_pose.theta = tf::getYaw(human_transformed.orientation);
+                    hanp_prediction::PredictedPose transformed_pose;
+                    transformed_pose.pose2d.x = human_transformed.position.x;
+                    transformed_pose.pose2d.y = human_transformed.position.y;
+                    transformed_pose.pose2d.theta = tf::getYaw(human_transformed.orientation);
+                    transformed_pose.radius = predicted_pose.radius;
                     transformed_human.poses.push_back(transformed_pose);
 
                     ROS_DEBUG_NAMED("context_cost_function", "transformed human pose"
                     " to %s frame, resulting pose: x=%f, y=%f theta=%f",
-                    global_frame_.c_str(), transformed_pose.x, transformed_pose.y, transformed_pose.theta);
+                    global_frame_.c_str(), transformed_pose.pose2d.x,
+                    transformed_pose.pose2d.y, transformed_pose.pose2d.theta);
                 }
                 transformed_human.track_id = predicted_human.track_id;
             }
