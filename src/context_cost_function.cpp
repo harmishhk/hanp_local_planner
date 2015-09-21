@@ -84,8 +84,14 @@ namespace hanp_local_planner
         // TODO: discard humans who are behind the robot
 
         hanp_prediction::HumanPosePredict predict_srv;
-        predict_srv.request.predict_times.push_back(predict_time_);
-        predict_srv.request.type = hanp_prediction::HumanPosePredictRequest::VELOCITY_SCALE;
+        double traj_size = traj.getPointsSize();
+        std::vector<double> predict_times;
+        for(double i = 1.0; i <= traj_size; ++i)
+        {
+            predict_times.push_back(predict_time_ * (i / traj_size));
+        }
+        predict_srv.request.predict_times = predict_times;
+        predict_srv.request.type = hanp_prediction::HumanPosePredictRequest::VELOCITY_OBSTACLE;
         if(!predict_humans_client_.call(predict_srv))
         {
             ROS_DEBUG_THROTTLE_NAMED(MESSAGE_THROTTLE_PERIOD, "context_cost_function",
@@ -111,43 +117,43 @@ namespace hanp_local_planner
 
         for(auto transformed_human : transformed_humans)
         {
-            for(auto future_human_pose : transformed_human.poses)
+            unsigned int point_index = 0;
+            do
             {
-                unsigned int point_index = 0;
-                do
-                {
-                    // get the future pose of the robot
-                    traj.getPoint(point_index, rx, ry, rtheta);
+                // get the future pose of the robot
+                traj.getPoint(point_index, rx, ry, rtheta);
+                auto future_human_pose = transformed_human.poses[point_index]; //TODO: check index validity
+                ROS_DEBUG_NAMED("context_cost_function", "selecting futhre human pose %d of %d",
+                    point_index, transformed_human.poses.size());
 
-                    // calculate distance of robot to person
-                    d_p = hypot(rx - future_human_pose.pose2d.x, ry - future_human_pose.pose2d.y);
-                    // ROS_DEBUG_NAMED("context_cost_function", "rx=%f, ry=%f, hx=%f, hy=%f, d_p=%f",
-                    // rx, ry, future_human_pose.pose2d.x, future_human_pose.pose2d.y, d_p);
-                    alpha = fabs(angles::shortest_angular_distance(rtheta,
-                        angles::normalize_angle_positive(future_human_pose.pose2d.theta) - M_PI));
-                    // ROS_DEBUG_NAMED("context_cost_function", "rtheta=%f, h_inv_theta=%f, alpha=%f",
-                    // rtheta, angles::normalize_angle_positive(future_human_pose.pose2d.theta) - M_PI, alpha);
+                // calculate distance of robot to person
+                d_p = hypot(rx - future_human_pose.pose2d.x, ry - future_human_pose.pose2d.y);
+                ROS_DEBUG_NAMED("context_cost_function", "rx=%f, ry=%f, hx=%f, hy=%f, d_p=%f",
+                    rx, ry, future_human_pose.pose2d.x, future_human_pose.pose2d.y, d_p);
+                alpha = fabs(angles::shortest_angular_distance(rtheta,
+                    angles::normalize_angle_positive(future_human_pose.pose2d.theta) - M_PI));
+                // ROS_DEBUG_NAMED("context_cost_function", "rtheta=%f, h_inv_theta=%f, alpha=%f",
+                // rtheta, angles::normalize_angle_positive(future_human_pose.pose2d.theta) - M_PI, alpha);
 
-                    // check compatibility
-                    compatibility = getCompatabilty(d_p, alpha);
+                // check compatibility
+                compatibility = getCompatabilty(d_p, alpha);
 
-                    ROS_DEBUG_NAMED("context_cost_function", "calculated compatibility %f"
-                        " at d_p=%f, alpha=%f point: x=%f, y=%f (%d of %d)", compatibility,
-                        d_p, alpha, rx, ry, point_index, traj.getPointsSize()-1);
-                }
-                // keep calculating, until we find incompatible situation or end of path
-                while((++point_index < point_index_max) && (compatibility > 0.0));
-                point_index_max = point_index;
+                ROS_DEBUG_NAMED("context_cost_function", "calculated compatibility %f"
+                    " at d_p=%f, alpha=%f point: x=%f, y=%f (%d of %d)", compatibility,
+                    d_p, alpha, rx, ry, point_index, traj.getPointsSize()-1);
+            }
+            // keep calculating, until we find incompatible situation or end of path
+            while((++point_index < point_index_max) && (compatibility > 0.0));
+            point_index_max = point_index;
 
-                // ROS_DEBUG_NAMED("context_cost_function", "calculated maximum point index %d"
-                //     " (out of %d) for human at x=%d, y=%f", point_index_max, traj.getPointsSize(),
-                //     future_human_pose.pose2d.x, future_human_pose.pose2d.y);
+            // ROS_DEBUG_NAMED("context_cost_function", "calculated maximum point index %d"
+            //     " (out of %d) for human at x=%d, y=%f", point_index_max, traj.getPointsSize(),
+            //     future_human_pose.pose2d.x, future_human_pose.pose2d.y);
 
-                // no need to check more when we have to stop
-                if (point_index_max == 1)
-                {
-                    return 0.0;
-                }
+            // no need to check more when we have to stop
+            if (point_index_max == 1)
+            {
+                return 0.0;
             }
         }
 
