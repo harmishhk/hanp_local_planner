@@ -51,14 +51,14 @@ namespace hanp_local_planner
         ros::NodeHandle private_nh("~/");
         predict_humans_client_ = private_nh.serviceClient<hanp_prediction::HumanPosePredict>(PREDICT_SERVICE_NAME);
 
+        // initialize variables
+        global_frame_ = global_frame;
+        tf_ = tf;
+
         if(publish_predicted_human_markers_)
         {
             predict_human_pub_ = private_nh.advertise<visualization_msgs::MarkerArray>(PREDICTD_HUMAN_PUB_TOPIC, 1);
         }
-
-        // initialize variables
-        global_frame_ = global_frame;
-        tf_ = tf;
     }
 
     bool ContextCostFunction::prepare()
@@ -118,35 +118,40 @@ namespace hanp_local_planner
 
         if(publish_predicted_human_markers_)
         {
+            // delete all previous markers
+            predicted_humans_markers_.markers.clear();
+            visualization_msgs::Marker delete_human;
+            delete_human.action = 3; // visualization_msgs::Marker::DELETEALL
+            predicted_humans_markers_.markers.push_back(delete_human);
+            predict_human_pub_.publish(predicted_humans_markers_);
+
+            // create new markers
+            int marker_id = 0;
             predicted_humans_markers_.markers.clear();
 
             for(auto transformed_human : transformed_humans)
             {
-                visualization_msgs::Marker predicted_human;
-                predicted_human.header.frame_id = global_frame_;
-                predicted_human.header.stamp = ros::Time();
-                predicted_human.id = transformed_human.track_id;
-                predicted_human.type = visualization_msgs::Marker::SPHERE_LIST;
-                predicted_human.action = visualization_msgs::Marker::MODIFY;
-                predicted_human.scale.x = 0.1;
-                predicted_human.scale.y = 0.1;
-                predicted_human.scale.z = 0.1;
-                predicted_human.color.a = 1.0;
-                predicted_human.color.r = 0.0;
-                predicted_human.color.g = 1.0;
-                predicted_human.color.b = 0.0;
-
                 for(auto transformed_human_pose : transformed_human.poses)
                 {
-                    geometry_msgs::Point predicted_human_point;
-                    predicted_human_point.x = transformed_human_pose.pose2d.x;
-                    predicted_human_point.y = transformed_human_pose.pose2d.y;
-                    predicted_human.points.push_back(predicted_human_point);
+                    visualization_msgs::Marker predicted_human;
+                    predicted_human.header.frame_id = global_frame_;
+                    predicted_human.header.stamp = ros::Time();
+                    predicted_human.id = marker_id++;
+                    predicted_human.type = visualization_msgs::Marker::CYLINDER;
+                    predicted_human.action = visualization_msgs::Marker::ADD;
+                    predicted_human.scale.x = transformed_human_pose.radius;
+                    predicted_human.scale.y = transformed_human_pose.radius;
+                    predicted_human.scale.z = 0.01;
+                    predicted_human.color.a = 1.0;
+                    predicted_human.color.r = 0.0;
+                    predicted_human.color.g = 0.0;
+                    predicted_human.color.b = 1.0;
+                    predicted_human.lifetime = ros::Duration(predict_time_);
+                    predicted_human.pose.position.x = transformed_human_pose.pose2d.x;
+                    predicted_human.pose.position.y = transformed_human_pose.pose2d.y;
+                    predicted_humans_markers_.markers.push_back(predicted_human);
                 }
-
-                predicted_humans_markers_.markers.push_back(predicted_human);
             }
-
             predict_human_pub_.publish(predicted_humans_markers_);
 
             ROS_DEBUG_NAMED("context_cost_function", "published predicted humans");
