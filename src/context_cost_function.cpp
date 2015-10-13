@@ -173,7 +173,8 @@ namespace hanp_local_planner
                     point_index, transformed_human.poses.size());
 
                 // calculate distance of robot to person
-                d_p = hypot(rx - future_human_pose.pose2d.x, ry - future_human_pose.pose2d.y);
+                d_p = hypot(rx - future_human_pose.pose2d.x, ry - future_human_pose.pose2d.y)
+                    - future_human_pose.radius;
                 ROS_DEBUG_NAMED("context_cost_function", "rx=%f, ry=%f, hx=%f, hy=%f, d_p=%f",
                     rx, ry, future_human_pose.pose2d.x, future_human_pose.pose2d.y, d_p);
                 alpha = fabs(angles::shortest_angular_distance(rtheta,
