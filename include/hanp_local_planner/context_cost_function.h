@@ -51,7 +51,7 @@ namespace hanp_local_planner {
         bool prepare();
         double scoreTrajectory(base_local_planner::Trajectory &traj);
 
-        void setParams(double alpha_max, double d_low, double d_high,
+        void setParams(double alpha_max, double d_low, double d_high, double beta,
             double predict_time, bool publish_predicted_human_markers);
 
     private:
@@ -59,7 +59,7 @@ namespace hanp_local_planner {
 
         tf::TransformListener* tf_;
 
-        double alpha_max_, d_low_, d_high_;
+        double alpha_max_, d_low_, d_high_, beta_;
         double predict_time_;
         std::string global_frame_;
 

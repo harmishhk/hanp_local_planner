@@ -120,7 +120,7 @@ namespace hanp_local_planner
         prefer_forward_costs_->setPenalty(config.backward_motion_penalty);
 
         context_cost_function_->setParams(config.cc_alpha_max, config.cc_d_low,
-            config.cc_d_high, config.sim_time, config.publish_predictions);
+            config.cc_d_high, config.cc_beta, config.sim_time, config.publish_predictions);
 
         int vx_samp, vy_samp, vth_samp;
         vx_samp = config.vx_samples;

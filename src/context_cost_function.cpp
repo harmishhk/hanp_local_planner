@@ -34,6 +34,7 @@
 #define ALPHA_MAX 2.09 // (2*M_PI/3) radians, angle between robot heading and inverse of human heading
 #define D_LOW 0.7 // meters, minimum distance for compatibility measure
 #define D_HIGH 10.0 // meters, maximum distance for compatibility measure
+#define BETA 1.57 // meters, angle from robot front to discard human for collision in comaptibility calculations
 #define PREDICT_TIME 2.0 // seconds, time for predicting human and robot position, before checking compatibility
 
 #define MESSAGE_THROTTLE_PERIOD 4.0 // seconds
@@ -61,17 +62,18 @@ namespace hanp_local_planner
     bool ContextCostFunction::prepare()
     {
         // set default parameters
-        setParams(ALPHA_MAX, D_LOW, D_HIGH, PREDICT_TIME, false);
+        setParams(ALPHA_MAX, D_LOW, D_HIGH, BETA, PREDICT_TIME, false);
 
         return true;
     }
 
-    void ContextCostFunction::setParams(double alpha_max, double d_low, double d_high,
+    void ContextCostFunction::setParams(double alpha_max, double d_low, double d_high, double beta,
         double predict_time, bool publish_predicted_human_markers)
     {
         alpha_max_ = alpha_max;
         d_low_ = d_low;
         d_high_ = d_high;
+        beta_ = beta;
         predict_time_ = predict_time;
         publish_predicted_human_markers_ = publish_predicted_human_markers;
 
@@ -84,7 +86,6 @@ namespace hanp_local_planner
     double ContextCostFunction::scoreTrajectory(base_local_planner::Trajectory &traj)
     {
         // TODO: discard humans, if information is too old
-        // TODO: discard humans who are behind the robot
 
         hanp_prediction::HumanPosePredict predict_srv;
         double traj_size = traj.getPointsSize();
@@ -170,11 +171,22 @@ namespace hanp_local_planner
                 ROS_DEBUG_NAMED("context_cost_function", "selecting futhre human pose %d of %d",
                     point_index, transformed_human.poses.size());
 
+                // discard human behind the robot
+                auto a_p = fabs(angles::shortest_angular_distance(rtheta, atan2(ry - future_human_pose.pose2d.y,
+                    rx - future_human_pose.pose2d.x)));
+                if (a_p < beta_)
+                {
+                    ROS_DEBUG_NAMED("context_cost_function", "discarding human (%d)"
+                        " future pose (%u) for compatibility calculations",
+                        transformed_human.track_id, point_index);
+                    continue;
+                }
+
                 // calculate distance of robot to person
                 d_p = hypot(rx - future_human_pose.pose2d.x, ry - future_human_pose.pose2d.y)
                     - future_human_pose.radius;
-                ROS_DEBUG_NAMED("context_cost_function", "rx=%f, ry=%f, hx=%f, hy=%f, d_p=%f",
-                    rx, ry, future_human_pose.pose2d.x, future_human_pose.pose2d.y, d_p);
+                ROS_DEBUG_NAMED("context_cost_function", "rx=%f, ry=%f, hx=%f, hy=%f, d_p=%f, a_p=%f",
+                    rx, ry, future_human_pose.pose2d.x, future_human_pose.pose2d.y, d_p, a_p);
                 alpha = fabs(angles::shortest_angular_distance(rtheta,
                     angles::normalize_angle_positive(future_human_pose.pose2d.theta) - M_PI));
                 // ROS_DEBUG_NAMED("context_cost_function", "rtheta=%f, h_inv_theta=%f, alpha=%f",
