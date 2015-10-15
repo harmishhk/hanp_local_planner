@@ -51,7 +51,8 @@ namespace hanp_local_planner {
         bool prepare();
         double scoreTrajectory(base_local_planner::Trajectory &traj);
 
-        void setParams(double alpha_max, double d_low, double d_high, double predict_time);
+        void setParams(double alpha_max, double d_low, double d_high,
+            double predict_time, bool publish_predicted_human_markers);
 
     private:
         ros::ServiceClient predict_humans_client_;
@@ -66,7 +67,7 @@ namespace hanp_local_planner {
 
         hanp_prediction::PredictedPoses transformHumanPoses(hanp_prediction::PredictedPoses&, std::string frame_id);
 
-        bool publish_predicted_human_markers_ = true;
+        bool publish_predicted_human_markers_ = false;
         visualization_msgs::MarkerArray predicted_humans_markers_;
         ros::Publisher predict_human_pub_;
     };

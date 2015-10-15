@@ -55,27 +55,25 @@ namespace hanp_local_planner
         global_frame_ = global_frame;
         tf_ = tf;
 
-        if(publish_predicted_human_markers_)
-        {
-            predict_human_pub_ = private_nh.advertise<visualization_msgs::MarkerArray>(PREDICTD_HUMAN_PUB_TOPIC, 1);
-        }
+        predict_human_pub_ = private_nh.advertise<visualization_msgs::MarkerArray>(PREDICTD_HUMAN_PUB_TOPIC, 1);
     }
 
     bool ContextCostFunction::prepare()
     {
         // set default parameters
-        setParams(ALPHA_MAX, D_LOW, D_HIGH, PREDICT_TIME);
+        setParams(ALPHA_MAX, D_LOW, D_HIGH, PREDICT_TIME, false);
 
         return true;
     }
 
-    void ContextCostFunction::setParams(double alpha_max, double d_low,
-        double d_high, double predict_time)
+    void ContextCostFunction::setParams(double alpha_max, double d_low, double d_high,
+        double predict_time, bool publish_predicted_human_markers)
     {
         alpha_max_ = alpha_max;
         d_low_ = d_low;
         d_high_ = d_high;
         predict_time_ = predict_time;
+        publish_predicted_human_markers_ = publish_predicted_human_markers;
 
         ROS_DEBUG_NAMED("context_cost_function", "context-cost function parameters set: "
         "alpha_max=%f, d_low=%f, d_high=:%f, predict_time=%f",
