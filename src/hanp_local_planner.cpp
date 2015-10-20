@@ -350,6 +350,11 @@ namespace hanp_local_planner
         t_diff = end_t - start_t;
         ROS_INFO("Cycle time: %.9f", t_diff);
         */
+        if(path.cost_ < 0 || path.getPointsSize() == 0)
+        {
+            ROS_DEBUG_NAMED("hanp_local_planner", "normal footprint did not wokr, trying unpadded footprint");
+            path = findBestPath(global_pose, robot_vel, drive_cmds, costmap_ros_->getUnpaddedRobotFootprint());
+        }
 
         cmd_vel.linear.x = drive_cmds.getOrigin().getX();
         cmd_vel.linear.y = drive_cmds.getOrigin().getY();
