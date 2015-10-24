@@ -101,10 +101,10 @@ namespace hanp_local_planner
         pdist_scale_ = config.path_distance_bias;
         path_clearning_distance_squared_ = config.path_clearning_distance * config.path_clearning_distance;
         path_costs_->setScale(resolution * pdist_scale_ * 0.5);
-        alignment_costs_->setScale(resolution * pdist_scale_ * 0.5);
+        //alignment_costs_->setScale(resolution * pdist_scale_ * 0.5);
 
         gdist_scale_ = config.goal_distance_bias;
-        goal_costs_->setScale(resolution * gdist_scale_ * 0.5);
+        //goal_costs_->setScale(resolution * gdist_scale_ * 0.5);
         goal_front_costs_->setScale(resolution * gdist_scale_ * 0.5);
 
         occdist_scale_ = config.occdist_scale;
@@ -113,8 +113,9 @@ namespace hanp_local_planner
         stop_time_buffer_ = config.stop_time_buffer;
         oscillation_costs_.setOscillationResetDist(config.oscillation_reset_dist, config.oscillation_reset_angle);
         forward_point_distance_ = config.forward_point_distance;
+        forward_point_distance_mul_fac_ = 1.0;
         goal_front_costs_->setXShift(forward_point_distance_);
-        alignment_costs_->setXShift(forward_point_distance_);
+        //alignment_costs_->setXShift(forward_point_distance_);
         obstacle_costs_->setParams(config.max_trans_vel, config.max_scaling_factor, config.scaling_speed);
 
         prefer_forward_costs_->setPenalty(config.backward_motion_penalty);
@@ -172,9 +173,9 @@ namespace hanp_local_planner
 
             obstacle_costs_ = new base_local_planner::ObstacleCostFunction(planner_util_.getCostmap());
             path_costs_ = new base_local_planner::MapGridCostFunction(planner_util_.getCostmap());
-            goal_costs_ = new base_local_planner::MapGridCostFunction(planner_util_.getCostmap(), 0.0, 0.0, true);
+            //goal_costs_ = new base_local_planner::MapGridCostFunction(planner_util_.getCostmap(), 0.0, 0.0, true);
             goal_front_costs_ = new base_local_planner::MapGridCostFunction(planner_util_.getCostmap(), 0.0, 0.0, true);
-            alignment_costs_ = new base_local_planner::MapGridCostFunction(planner_util_.getCostmap());
+            //alignment_costs_ = new base_local_planner::MapGridCostFunction(planner_util_.getCostmap());
 
             prefer_forward_costs_ = new base_local_planner::PreferForwardCostFunction(0.0);
 
@@ -182,7 +183,7 @@ namespace hanp_local_planner
             context_cost_function_->initialize(planner_util_.getGlobalFrame(), tf);
 
             goal_front_costs_->setStopOnFailure( false );
-            alignment_costs_->setStopOnFailure( false );
+            //alignment_costs_->setStopOnFailure( false );
 
             std::string controller_frequency_param_name;
             if(!private_nh.searchParam("controller_frequency", controller_frequency_param_name))
@@ -226,9 +227,9 @@ namespace hanp_local_planner
             critics.push_back(&oscillation_costs_);
             critics.push_back(obstacle_costs_);
             critics.push_back(goal_front_costs_);
-            critics.push_back(alignment_costs_);
+            //critics.push_back(alignment_costs_);
             critics.push_back(path_costs_);
-            critics.push_back(goal_costs_);
+            //critics.push_back(goal_costs_);
             critics.push_back(prefer_forward_costs_);
 
             std::vector<base_local_planner::TrajectorySampleGenerator*> generator_list;
@@ -273,16 +274,30 @@ namespace hanp_local_planner
 
     bool HANPLocalPlanner::isGoalReached()
     {
+        // struct timeval start_e, start_a, end_f;
+        // double start_e_t, start_a_t, end_f_t, se_diff;
+        // gettimeofday(&start_a, NULL);
+        // start_a_t = start_a.tv_sec + double(start_a.tv_usec) / 1e6;
+
         if (! isInitialized())
         {
             ROS_ERROR("This planner has not been initialized, please call initialize() before using this planner");
             return false;
         }
+
+        // gettimeofday(&start_e, NULL);
+        // start_e_t = start_e.tv_sec + double(start_e.tv_usec) / 1e6;
+
         if ( ! costmap_ros_->getRobotPose(current_pose_))
         {
             ROS_ERROR("Could not get robot pose");
             return false;
         }
+
+        // gettimeofday(&end_f, NULL);
+        // end_f_t = end_f.tv_sec + double(end_f.tv_usec) / 1e6;
+        // se_diff = end_f_t - start_e_t;
+        // ROS_INFO("isGoalReached: pose getting time: %.9f", se_diff);
 
         if(latchedStopRotateController_.isGoalReached(&planner_util_, odom_helper_, current_pose_))
         {
@@ -297,10 +312,22 @@ namespace hanp_local_planner
             publishLocalPlan(local_plan);
 
             ROS_INFO("Goal reached");
+
+            // gettimeofday(&end_f, NULL);
+            // end_f_t = end_f.tv_sec + double(end_f.tv_usec) / 1e6;
+            // se_diff = end_f_t - start_a_t;
+            // ROS_INFO("isGoalReached: full time: %.9f", se_diff);
+
             return true;
         }
         else
         {
+
+            // gettimeofday(&end_f, NULL);
+            // end_f_t = end_f.tv_sec + double(end_f.tv_usec) / 1e6;
+            // se_diff = end_f_t - start_a_t;
+            // ROS_INFO("isGoalReached: full time: %.9f", se_diff);
+
             return false;
         }
     }
@@ -325,17 +352,17 @@ namespace hanp_local_planner
         if(! isInitialized())
         {
             ROS_ERROR("This planner has not been initialized, please call initialize() before using this planner");
+            failures_.push_back(hanp_local_planner::FailureType::NOT_INITIALIZED);
             return false;
         }
 
         tf::Stamped<tf::Pose> robot_vel;
         odom_helper_.getRobotVel(robot_vel);
+        //ROS_DEBUG("robot vel: x=%f, y=%f, w=%f", robot_vel.getOrigin().getX(), robot_vel.getOrigin().getY(), tf::getYaw(robot_vel.getRotation()));
 
-        /* For timing uncomment
-        struct timeval start, end;
-        double start_t, end_t, t_diff;
-        gettimeofday(&start, NULL);
-        */
+        // struct timeval start, end;
+        // double start_t, end_t, t_diff;
+        // gettimeofday(&start, NULL);
 
         tf::Stamped<tf::Pose> drive_cmds;
         drive_cmds.frame_id_ = costmap_ros_->getBaseFrameID();
@@ -343,16 +370,15 @@ namespace hanp_local_planner
         base_local_planner::Trajectory path = findBestPath(global_pose, robot_vel, drive_cmds, costmap_ros_->getRobotFootprint());
         //ROS_ERROR("Best: %.2f, %.2f, %.2f, %.2f", path.xv_, path.yv_, path.thetav_, path.cost_);
 
-        /* For timing uncomment
-        gettimeofday(&end, NULL);
-        start_t = start.tv_sec + double(start.tv_usec) / 1e6;
-        end_t = end.tv_sec + double(end.tv_usec) / 1e6;
-        t_diff = end_t - start_t;
-        ROS_INFO("Cycle time: %.9f", t_diff);
-        */
+        // gettimeofday(&end, NULL);
+        // start_t = start.tv_sec + double(start.tv_usec) / 1e6;
+        // end_t = end.tv_sec + double(end.tv_usec) / 1e6;
+        // t_diff = end_t - start_t;
+        // ROS_INFO("Cycle time: %.9f", t_diff);
+
         if(path.cost_ < 0 || path.getPointsSize() == 0)
         {
-            ROS_DEBUG_NAMED("hanp_local_planner", "normal footprint did not wokr, trying unpadded footprint");
+            ROS_DEBUG_NAMED("hanp_local_planner", "hanp_local_planner: normal footprint did not work, trying unpadded footprint");
             path = findBestPath(global_pose, robot_vel, drive_cmds, costmap_ros_->getUnpaddedRobotFootprint());
         }
 
@@ -368,6 +394,17 @@ namespace hanp_local_planner
             local_plan.clear();
             publishLocalPlan(local_plan);
 
+            if(path.cost_ < 0)
+            {
+                ROS_INFO("cost: %f", path.cost_);
+                failures_.push_back(hanp_local_planner::FailureType::PATH_IN_COLLISION);
+            }
+
+            if(path.getPointsSize() == 0)
+            {
+                ROS_INFO("path size: %d", path.getPointsSize());
+                failures_.push_back(hanp_local_planner::FailureType::CURRENTLY_IN_COLLISION);
+            }
             return false;
         }
 
@@ -410,31 +447,60 @@ namespace hanp_local_planner
         return true;
     }
 
-    bool HANPLocalPlanner::computeVelocityCommands(geometry_msgs::Twist& cmd_vel)
+    bool HANPLocalPlanner::computeVelocityCommandsAccErrors(geometry_msgs::Twist& cmd_vel)
     {
+        // struct timeval start_e, end_f;
+        // double start_e_t, end_f_t, se_diff;
+        // gettimeofday(&start_e, NULL);
+        // start_e_t = start_e.tv_sec + double(start_e.tv_usec) / 1e6;
+
         if ( ! costmap_ros_->getRobotPose(current_pose_))
         {
             ROS_ERROR("Could not get robot pose");
+            failures_.push_back(hanp_local_planner::FailureType::NO_ROBOT_POSE);
             return false;
         }
+
+        // gettimeofday(&end_f, NULL);
+        // end_f_t = end_f.tv_sec + double(end_f.tv_usec) / 1e6;
+        // se_diff = end_f_t - start_e_t;
+        // ROS_INFO("computeVelocityCommands: until pose getting time: %.9f", se_diff);
+
         std::vector<geometry_msgs::PoseStamped> transformed_plan;
         if ( ! planner_util_.getLocalPlan(current_pose_, transformed_plan))
         {
             ROS_ERROR("Could not get local plan");
+            failures_.push_back(hanp_local_planner::FailureType::NO_TRANSFORMED_PLAN);
             return false;
         }
 
         if(transformed_plan.empty())
         {
             ROS_WARN_NAMED("hanp_local_planner", "Received an empty transformed plan.");
+            failures_.push_back(hanp_local_planner::FailureType::EMPTY_TRANSFORMED_PLAN);
             return false;
         }
         ROS_DEBUG_NAMED("hanp_local_planner", "Received a transformed plan with %zu points.", transformed_plan.size());
 
+        // gettimeofday(&end_f, NULL);
+        // end_f_t = end_f.tv_sec + double(end_f.tv_usec) / 1e6;
+        // se_diff = end_f_t - start_e_t;
+        // ROS_INFO("computeVelocityCommands: until transform plan time: %.9f", se_diff);
+
         updatePlanAndLocalCosts(current_pose_, transformed_plan);
+
+        // gettimeofday(&end_f, NULL);
+        // end_f_t = end_f.tv_sec + double(end_f.tv_usec) / 1e6;
+        // se_diff = end_f_t - start_e_t;
+        // ROS_INFO("computeVelocityCommands: until updatePlanAndLocalCosts time: %.9f", se_diff);
 
         if (latchedStopRotateController_.isPositionReached(&planner_util_, current_pose_))
         {
+            // gettimeofday(&end_f, NULL);
+            // end_f_t = end_f.tv_sec + double(end_f.tv_usec) / 1e6;
+            // se_diff = end_f_t - start_e_t;
+            // ROS_INFO("computeVelocityCommands: until isPositionReached time: %.9f", se_diff);
+
             std::vector<geometry_msgs::PoseStamped> local_plan;
             std::vector<geometry_msgs::PoseStamped> transformed_plan;
 
@@ -459,21 +525,46 @@ namespace hanp_local_planner
             publishGlobalPlan(transformed_plan);
             publishLocalPlan(local_plan);
 
+            // gettimeofday(&end_f, NULL);
+            // end_f_t = end_f.tv_sec + double(end_f.tv_usec) / 1e6;
+            // se_diff = end_f_t - start_e_t;
+            // ROS_INFO("computeVelocityCommands: full time: %.9f", se_diff);
+
+            if(!local_plan_found)
+            {
+                failures_.push_back(hanp_local_planner::FailureType::CANNOT_ROTATE_AT_END);
+            }
             return local_plan_found;
         }
         else
         {
+            // gettimeofday(&end_f, NULL);
+            // end_f_t = end_f.tv_sec + double(end_f.tv_usec) / 1e6;
+            // se_diff = end_f_t - start_e_t;
+            // ROS_INFO("computeVelocityCommands: until isPositionReached time: %.9f", se_diff);
+
             bool isOk = hanpComputeVelocityCommands(current_pose_, cmd_vel);
+
+            // gettimeofday(&end_f, NULL);
+            // end_f_t = end_f.tv_sec + double(end_f.tv_usec) / 1e6;
+            // se_diff = end_f_t - start_e_t;
+            // ROS_INFO("computeVelocityCommands: until after hanpComputeVelocityCommands time: %.9f", se_diff);
+
             if (isOk)
             {
                 publishGlobalPlan(transformed_plan);
             }
             else
             {
-                ROS_WARN_NAMED("hanp_local_planner", "HANP local planner failed to produce path.");
                 std::vector<geometry_msgs::PoseStamped> empty_plan;
                 publishGlobalPlan(empty_plan);
             }
+
+            // gettimeofday(&end_f, NULL);
+            // end_f_t = end_f.tv_sec + double(end_f.tv_usec) / 1e6;
+            // se_diff = end_f_t - start_e_t;
+            // ROS_INFO("computeVelocityCommands: full time: %.9f", se_diff);
+
             return isOk;
         }
     }
@@ -481,7 +572,7 @@ namespace hanp_local_planner
     bool HANPLocalPlanner::getCellCosts(int cx, int cy, float &path_cost, float &goal_cost, float &occ_cost, float &total_cost)
     {
         path_cost = path_costs_->getCellCosts(cx, cy);
-        goal_cost = goal_costs_->getCellCosts(cx, cy);
+        goal_cost = goal_front_costs_->getCellCosts(cx, cy);
         occ_cost = planner_util_.getCostmap()->getCost(cx, cy);
         if (path_cost == path_costs_->obstacleCosts() ||
             path_cost == path_costs_->unreachableCellCosts() ||
@@ -547,33 +638,51 @@ namespace hanp_local_planner
             " points from global plan for path-distance costs", remove_index, global_plan_.size());
         path_costs_->setTargetPoses(remaining_global_plan);
 
-        goal_costs_->setTargetPoses(global_plan_);
+        //goal_costs_->setTargetPoses(global_plan_);
 
         geometry_msgs::PoseStamped goal_pose = global_plan_.back();
 
         double sq_dist = (pos[0] - goal_pose.pose.position.x) * (pos[0] - goal_pose.pose.position.x) +
             (pos[1] - goal_pose.pose.position.y) * (pos[1] - goal_pose.pose.position.y);
 
+        // tf::Stamped<tf::Pose> robot_vel;
+        // odom_helper_.getRobotVel(robot_vel);
+        // double lin_vel = robot_vel.getOrigin().getX();
+        // if(lin_vel <= 0.2)
+        // {
+        //     forward_point_distance_mul_fac_ = 0.2;
+        // }
+        // if(lin_vel > 0.2 && lin_vel < 0.4)
+        // {
+        //     double vel_frac = lin_vel - 0.2 / (0.4 - 0.2);
+        //     forward_point_distance_mul_fac_ = 0.2 + (1.0 - 0.2) * vel_frac;
+        // }
+        // if(lin_vel > 0.4)
+        // {
+        //     forward_point_distance_mul_fac_ = 1.0;
+        // }
+        //ROS_INFO("forward_point_distance_mul_fac_ =  %f, robot_vel = %f", forward_point_distance_mul_fac_, robot_vel.getOrigin().getX());
+
         std::vector<geometry_msgs::PoseStamped> front_global_plan = global_plan_;
         double angle_to_goal = atan2(goal_pose.pose.position.y - pos[1], goal_pose.pose.position.x - pos[0]);
         front_global_plan.back().pose.position.x = front_global_plan.back().pose.position.x +
-            forward_point_distance_ * cos(angle_to_goal);
+            forward_point_distance_ * forward_point_distance_mul_fac_ * cos(angle_to_goal);
         front_global_plan.back().pose.position.y = front_global_plan.back().pose.position.y +
-            forward_point_distance_ * sin(angle_to_goal);
+            forward_point_distance_ * forward_point_distance_mul_fac_ * sin(angle_to_goal);
 
         goal_front_costs_->setTargetPoses(front_global_plan);
 
-        if (sq_dist > forward_point_distance_ * forward_point_distance_ * cheat_factor_)
-        {
-            double resolution = planner_util_.getCostmap()->getResolution();
-            alignment_costs_->setScale(resolution * pdist_scale_ * 0.5);
-
-            alignment_costs_->setTargetPoses(global_plan_);
-        }
-        else
-        {
-            alignment_costs_->setScale(0.0);
-        }
+        // if (sq_dist > forward_point_distance_ * forward_point_distance_ * cheat_factor_)
+        // {
+        //     double resolution = planner_util_.getCostmap()->getResolution();
+        //     alignment_costs_->setScale(resolution * pdist_scale_ * 0.5);
+        //
+        //     alignment_costs_->setTargetPoses(global_plan_);
+        // }
+        // else
+        // {
+        //     alignment_costs_->setScale(0.0);
+        // }
     }
 
     base_local_planner::Trajectory HANPLocalPlanner::findBestPath(tf::Stamped<tf::Pose> global_pose,
@@ -649,4 +758,51 @@ namespace hanp_local_planner
 
         return result_traj_;
     }
+
+    bool HANPLocalPlanner::computeVelocityCommands(geometry_msgs::Twist& cmd_vel)
+    {
+        // reset failure bits
+        failures_.clear();
+
+        // compute velocities
+        if(computeVelocityCommandsAccErrors(cmd_vel))
+        {
+            return true;
+        }
+        else
+        {
+            ROS_WARN_NAMED("hanp_local_planner", "hanp local planner failed to produce path, because ...");
+            for(auto failure : failures_)
+            {
+                switch(failure)
+                {
+                    case NOT_INITIALIZED:
+                        ROS_WARN_NAMED("hanp_local_planner", "\tit was not initialized");
+                        break;
+                    case NO_ROBOT_POSE:
+                        ROS_WARN_NAMED("hanp_local_planner", "\tit could not get the robot pose from he costmap");
+                        break;
+                    case NO_TRANSFORMED_PLAN:
+                        ROS_WARN_NAMED("hanp_local_planner", "\tit cannot transform the plan");
+                        break;
+                    case EMPTY_TRANSFORMED_PLAN:
+                        ROS_WARN_NAMED("hanp_local_planner", "\tit received an empty plan");
+                        break;
+                    case CANNOT_ROTATE_AT_END:
+                        ROS_WARN_NAMED("hanp_local_planner", "\tit was not able to rotate on the spot");
+                        break;
+                    case CURRENTLY_IN_COLLISION:
+                        ROS_WARN_NAMED("hanp_local_planner", "\tit is in collision right now");
+                        break;
+                    case PATH_IN_COLLISION:
+                        ROS_WARN_NAMED("hanp_local_planner", "\tit's transformed path was in collision");
+                        break;
+                    default:
+                        break;
+                }
+            }
+            return false;
+        }
+    }
+
 };

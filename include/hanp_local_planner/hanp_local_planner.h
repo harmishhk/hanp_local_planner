@@ -76,6 +76,10 @@
 
 namespace hanp_local_planner
 {
+    enum DiagnosticType { INFO, WARN, ERROR };
+    enum FailureType { NOT_INITIALIZED, NO_ROBOT_POSE, NO_TRANSFORMED_PLAN, EMPTY_TRANSFORMED_PLAN,
+        CANNOT_ROTATE_AT_END, CURRENTLY_IN_COLLISION, PATH_IN_COLLISION };
+
     class HANPLocalPlanner : public nav_core::BaseLocalPlanner
     {
     public:
@@ -88,6 +92,7 @@ namespace hanp_local_planner
 
         bool computeVelocityCommands(geometry_msgs::Twist& cmd_vel);
 
+        bool computeVelocityCommandsAccErrors(geometry_msgs::Twist& cmd_vel);
         bool hanpComputeVelocityCommands(tf::Stamped<tf::Pose>& global_pose, geometry_msgs::Twist& cmd_vel);
 
         bool setPlan(const std::vector<geometry_msgs::PoseStamped>& orig_global_plan);
@@ -132,7 +137,7 @@ namespace hanp_local_planner
         double pdist_scale_, gdist_scale_, occdist_scale_;
         Eigen::Vector3f vsamples_;
         double sim_period_, sim_time_;
-        double forward_point_distance_;
+        double forward_point_distance_, forward_point_distance_mul_fac_;
         std::vector<geometry_msgs::PoseStamped> global_plan_;
         boost::mutex configuration_mutex_;
         pcl::PointCloud<base_local_planner::MapGridCostPoint>* traj_cloud_;
@@ -158,6 +163,8 @@ namespace hanp_local_planner
         base_local_planner::SimpleScoredSamplingPlanner scored_sampling_planner_;
 
         hanp_local_planner::ContextCostFunction* context_cost_function_;
+
+        std::vector<hanp_local_planner::FailureType> failures_;
     };
 };
 #endif
