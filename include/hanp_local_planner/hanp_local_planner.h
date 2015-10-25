@@ -146,6 +146,7 @@ namespace hanp_local_planner
         bool publish_traj_pc_;
         double cheat_factor_;
         double path_clearning_distance_squared_;
+        double stop_rotate_reduce_factor_;
 
         base_local_planner::LatchedStopRotateController latchedStopRotateController_;
         base_local_planner::OdometryHelperRos odom_helper_;

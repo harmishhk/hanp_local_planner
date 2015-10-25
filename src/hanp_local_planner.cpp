@@ -152,6 +152,8 @@ namespace hanp_local_planner
         vsamples_[0] = vx_samp;
         vsamples_[1] = vy_samp;
         vsamples_[2] = vth_samp;
+
+        stop_rotate_reduce_factor_ = config.stop_rotate_reduce_factor;
     }
 
     HANPLocalPlanner::HANPLocalPlanner() : initialized_(false), odom_helper_(PLANNING_FRAME), setup_(false) { }
@@ -396,13 +398,11 @@ namespace hanp_local_planner
 
             if(path.cost_ < 0)
             {
-                ROS_INFO("cost: %f", path.cost_);
                 failures_.push_back(hanp_local_planner::FailureType::PATH_IN_COLLISION);
             }
 
             if(path.getPointsSize() == 0)
             {
-                ROS_INFO("path size: %d", path.getPointsSize());
                 failures_.push_back(hanp_local_planner::FailureType::CURRENTLY_IN_COLLISION);
             }
             return false;
@@ -467,16 +467,14 @@ namespace hanp_local_planner
         // ROS_INFO("computeVelocityCommands: until pose getting time: %.9f", se_diff);
 
         std::vector<geometry_msgs::PoseStamped> transformed_plan;
-        if ( ! planner_util_.getLocalPlan(current_pose_, transformed_plan))
+        if (!planner_util_.getLocalPlan(current_pose_, transformed_plan))
         {
-            ROS_ERROR("Could not get local plan");
             failures_.push_back(hanp_local_planner::FailureType::NO_TRANSFORMED_PLAN);
             return false;
         }
 
         if(transformed_plan.empty())
         {
-            ROS_WARN_NAMED("hanp_local_planner", "Received an empty transformed plan.");
             failures_.push_back(hanp_local_planner::FailureType::EMPTY_TRANSFORMED_PLAN);
             return false;
         }
@@ -520,6 +518,16 @@ namespace hanp_local_planner
                 geometry_msgs::PoseStamped pose;
                 tf::poseStampedTFToMsg(p, pose);
                 local_plan.push_back(pose);
+
+                // reduce stop_rotate_vel
+                cmd_vel.linear.x *= stop_rotate_reduce_factor_;
+                cmd_vel.linear.y *= stop_rotate_reduce_factor_;
+                cmd_vel.angular.z *= stop_rotate_reduce_factor_;
+
+            }
+            else
+            {
+                failures_.push_back(hanp_local_planner::FailureType::CANNOT_ROTATE_AT_END);
             }
 
             publishGlobalPlan(transformed_plan);
@@ -530,10 +538,6 @@ namespace hanp_local_planner
             // se_diff = end_f_t - start_e_t;
             // ROS_INFO("computeVelocityCommands: full time: %.9f", se_diff);
 
-            if(!local_plan_found)
-            {
-                failures_.push_back(hanp_local_planner::FailureType::CANNOT_ROTATE_AT_END);
-            }
             return local_plan_found;
         }
         else
@@ -780,10 +784,10 @@ namespace hanp_local_planner
                         ROS_WARN_NAMED("hanp_local_planner", "\tit was not initialized");
                         break;
                     case NO_ROBOT_POSE:
-                        ROS_WARN_NAMED("hanp_local_planner", "\tit could not get the robot pose from he costmap");
+                        ROS_WARN_NAMED("hanp_local_planner", "\tit could not get the robot pose from the costmap");
                         break;
                     case NO_TRANSFORMED_PLAN:
-                        ROS_WARN_NAMED("hanp_local_planner", "\tit cannot transform the plan");
+                        ROS_WARN_NAMED("hanp_local_planner", "\tit cannot transform the plan (may be empty)");
                         break;
                     case EMPTY_TRANSFORMED_PLAN:
                         ROS_WARN_NAMED("hanp_local_planner", "\tit received an empty plan");
@@ -792,7 +796,7 @@ namespace hanp_local_planner
                         ROS_WARN_NAMED("hanp_local_planner", "\tit was not able to rotate on the spot");
                         break;
                     case CURRENTLY_IN_COLLISION:
-                        ROS_WARN_NAMED("hanp_local_planner", "\tit is in collision right now");
+                        ROS_WARN_NAMED("hanp_local_planner", "\tthe robot is in collision right now");
                         break;
                     case PATH_IN_COLLISION:
                         ROS_WARN_NAMED("hanp_local_planner", "\tit's transformed path was in collision");
