@@ -120,7 +120,8 @@ namespace hanp_local_planner
         void updatePlanAndLocalCosts(tf::Stamped<tf::Pose> global_pose, const std::vector<geometry_msgs::PoseStamped>& new_plan);
         base_local_planner::Trajectory findBestPath(tf::Stamped<tf::Pose> global_pose,
             tf::Stamped<tf::Pose> global_vel, tf::Stamped<tf::Pose>& drive_velocities,
-            std::vector<geometry_msgs::Point> footprint_spec);
+            std::vector<geometry_msgs::Point> footprint_spec,
+            base_local_planner::LocalPlannerLimits limits);
 
         costmap_2d::Costmap2DROS* costmap_ros_;
         tf::TransformListener* tf_;
@@ -136,7 +137,10 @@ namespace hanp_local_planner
         double stop_time_buffer_;
         double pdist_scale_, gdist_scale_, occdist_scale_;
         Eigen::Vector3f vsamples_;
-        double sim_period_, sim_time_;
+        double sim_period_, sim_time_current_, sim_time_min_, sim_time_max_;
+        int sim_time_steps_;
+        double sim_granularity_, angular_sim_granularity_;
+        bool use_dwa_;
         double forward_point_distance_, forward_point_distance_mul_fac_;
         std::vector<geometry_msgs::PoseStamped> global_plan_;
         boost::mutex configuration_mutex_;

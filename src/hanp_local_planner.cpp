@@ -92,10 +92,23 @@ namespace hanp_local_planner
         limits.rot_stopped_vel = config.rot_stopped_vel;
         planner_util_.reconfigureCB(limits, config.restore_defaults);
 
-        generator_.setParameters(config.sim_time, config.sim_granularity,
-            config.angular_sim_granularity, config.use_dwa, sim_period_);
+        sim_time_min_ = config.sim_time_min;
+        sim_time_max_ = config.sim_time_max;
+        sim_time_steps_ = config.sim_time_steps;
+        sim_time_current_ = config.sim_time_min;
+        if(sim_time_max_ < sim_time_min_)
+        {
+            sim_time_max_ = sim_time_min_;
+            ROS_WARN_NAMED("hanp_local_planner", "sim_time_max(%f) cannot be smaller "
+                "than sim_time_min(%f), setting both values to %f", sim_time_max_,
+                sim_time_min_, sim_time_min_);
+        }
 
-        sim_time_ = config.sim_time;
+        sim_granularity_ = config.sim_granularity;
+        angular_sim_granularity_ = config.angular_sim_granularity;
+        use_dwa_ = config.use_dwa;
+        generator_.setParameters(sim_time_current_, sim_granularity_,
+            angular_sim_granularity_, use_dwa_, sim_period_);
 
         double resolution = planner_util_.getCostmap()->getResolution();
         pdist_scale_ = config.path_distance_bias;
@@ -121,7 +134,7 @@ namespace hanp_local_planner
         prefer_forward_costs_->setPenalty(config.backward_motion_penalty);
 
         context_cost_function_->setParams(config.cc_alpha_max, config.cc_d_low,
-            config.cc_d_high, config.cc_beta, config.sim_time, config.publish_predictions);
+            config.cc_d_high, config.cc_beta, sim_time_max_, config.publish_predictions);
 
         int vx_samp, vy_samp, vth_samp;
         vx_samp = config.vx_samples;
@@ -324,7 +337,6 @@ namespace hanp_local_planner
         }
         else
         {
-
             // gettimeofday(&end_f, NULL);
             // end_f_t = end_f.tv_sec + double(end_f.tv_usec) / 1e6;
             // se_diff = end_f_t - start_a_t;
@@ -358,9 +370,47 @@ namespace hanp_local_planner
             return false;
         }
 
+        base_local_planner::LocalPlannerLimits limits = planner_util_.getCurrentLimits();
+
         tf::Stamped<tf::Pose> robot_vel;
         odom_helper_.getRobotVel(robot_vel);
-        //ROS_DEBUG("robot vel: x=%f, y=%f, w=%f", robot_vel.getOrigin().getX(), robot_vel.getOrigin().getY(), tf::getYaw(robot_vel.getRotation()));
+        ROS_DEBUG_NAMED("hanp_local_planner", "current robot vel: x=%f, y=%f, w=%f",
+            robot_vel.getOrigin().getX(), robot_vel.getOrigin().getY(), tf::getYaw(robot_vel.getRotation()));
+
+        // calculate sim_time_current_ depending on current robot velocity
+        auto robot_lin_vel = robot_vel.getOrigin().getX();
+        if(sim_time_steps_ > 1)
+        {
+            for(int i=0; i < sim_time_steps_; i++)
+            {
+                if((robot_lin_vel >= (i * limits.max_trans_vel / sim_time_steps_)) &&
+                    (robot_lin_vel < (i + 1.0) * limits.max_trans_vel / sim_time_steps_))
+                {
+                    sim_time_current_ = sim_time_min_ + i * (sim_time_max_ - sim_time_min_) / (sim_time_steps_ - 1.0);
+                    break;
+                }
+            }
+        }
+        else
+        {
+            sim_time_current_ = sim_time_min_;
+        }
+
+        // update sim_time in the generator
+        generator_.setParameters(sim_time_current_, sim_granularity_,
+            angular_sim_granularity_, use_dwa_, sim_period_);
+        // ROS_DEBUG_NAMED("hanp_local_planner", "setting sim-time=%f", sim_time_current_);
+
+        // update acceleration limits
+        double acc_limits_reduce_factor = sim_time_current_ / sim_time_max_;
+        limits.acc_lim_x *= acc_limits_reduce_factor;
+        // limits.acc_lim_y *= acc_limits_reduce_factor;
+        // limits.acc_lim_theta *= acc_limits_reduce_factor;
+        limits.acc_limit_trans *= acc_limits_reduce_factor;
+        // ROS_DEBUG_NAMED("hanp_local_planner", "setting acceleration limist"
+        //     "x=%f, y=%f, theta=%f, trans=%f for reduce factor=%f",
+        //     limits.acc_lim_x, limits.acc_lim_y, limits.acc_lim_theta,
+        //     limits.acc_limit_trans, acc_limits_reduce_factor);
 
         // struct timeval start, end;
         // double start_t, end_t, t_diff;
@@ -369,7 +419,8 @@ namespace hanp_local_planner
         tf::Stamped<tf::Pose> drive_cmds;
         drive_cmds.frame_id_ = costmap_ros_->getBaseFrameID();
 
-        base_local_planner::Trajectory path = findBestPath(global_pose, robot_vel, drive_cmds, costmap_ros_->getRobotFootprint());
+        base_local_planner::Trajectory path = findBestPath(global_pose, robot_vel,
+            drive_cmds, costmap_ros_->getRobotFootprint(), limits);
         //ROS_ERROR("Best: %.2f, %.2f, %.2f, %.2f", path.xv_, path.yv_, path.thetav_, path.cost_);
 
         // gettimeofday(&end, NULL);
@@ -381,7 +432,8 @@ namespace hanp_local_planner
         if(path.cost_ < 0 || path.getPointsSize() == 0)
         {
             ROS_DEBUG_NAMED("hanp_local_planner", "hanp_local_planner: normal footprint did not work, trying unpadded footprint");
-            path = findBestPath(global_pose, robot_vel, drive_cmds, costmap_ros_->getUnpaddedRobotFootprint());
+            path = findBestPath(global_pose, robot_vel, drive_cmds,
+                costmap_ros_->getUnpaddedRobotFootprint(), limits);
         }
 
         cmd_vel.linear.x = drive_cmds.getOrigin().getX();
@@ -418,11 +470,12 @@ namespace hanp_local_planner
             path.erasePoints(remove_start, remove_end);
 
             // update the drive_cmds, while respecting the acceleration limits
-            base_local_planner::LocalPlannerLimits limits = planner_util_.getCurrentLimits();
-            // TODO: make use of use_dwa parameter
-            cmd_vel.linear.x = std::max(cmd_vel.linear.x * trajectory_scale, robot_vel.getOrigin().getX() - limits.acc_lim_x * sim_time_);
-            cmd_vel.linear.y = std::max(cmd_vel.linear.y * trajectory_scale, robot_vel.getOrigin().getY() - limits.acc_lim_y * sim_time_);
-            cmd_vel.angular.z = std::max(cmd_vel.angular.z * trajectory_scale, tf::getYaw(robot_vel.getRotation()) - limits.acc_lim_theta * sim_time_);
+            cmd_vel.linear.x = std::max(cmd_vel.linear.x * trajectory_scale,
+                robot_vel.getOrigin().getX() - limits.acc_lim_x * sim_time_max_);
+            cmd_vel.linear.y = std::max(cmd_vel.linear.y * trajectory_scale,
+                robot_vel.getOrigin().getY() - limits.acc_lim_y * sim_time_max_);
+            cmd_vel.angular.z = std::max(cmd_vel.angular.z * trajectory_scale,
+                tf::getYaw(robot_vel.getRotation()) - limits.acc_lim_theta * sim_time_max_);
 
             ROS_DEBUG_NAMED("hanp_local_planner", "hanp local planner scaled the plan by %d %%", (int)(trajectory_scale * 100));
         }
@@ -691,7 +744,8 @@ namespace hanp_local_planner
 
     base_local_planner::Trajectory HANPLocalPlanner::findBestPath(tf::Stamped<tf::Pose> global_pose,
         tf::Stamped<tf::Pose> global_vel, tf::Stamped<tf::Pose>& drive_velocities,
-        std::vector<geometry_msgs::Point> footprint_spec)
+        std::vector<geometry_msgs::Point> footprint_spec,
+        base_local_planner::LocalPlannerLimits limits)
     {
         obstacle_costs_->setFootprint(footprint_spec);
 
@@ -701,7 +755,7 @@ namespace hanp_local_planner
         Eigen::Vector3f vel(global_vel.getOrigin().getX(), global_vel.getOrigin().getY(), tf::getYaw(global_vel.getRotation()));
         geometry_msgs::PoseStamped goal_pose = global_plan_.back();
         Eigen::Vector3f goal(goal_pose.pose.position.x, goal_pose.pose.position.y, tf::getYaw(goal_pose.pose.orientation));
-        base_local_planner::LocalPlannerLimits limits = planner_util_.getCurrentLimits();
+        //base_local_planner::LocalPlannerLimits limits = planner_util_.getCurrentLimits();
 
         generator_.initialise(pos, vel, goal, &limits, vsamples_);
 
@@ -745,7 +799,7 @@ namespace hanp_local_planner
             map_viz_.publishCostCloud(planner_util_.getCostmap());
         }
 
-        oscillation_costs_.updateOscillationFlags(pos, &result_traj_, planner_util_.getCurrentLimits().min_trans_vel);
+        oscillation_costs_.updateOscillationFlags(pos, &result_traj_, limits.min_trans_vel);
 
         if (result_traj_.cost_ < 0)
         {
