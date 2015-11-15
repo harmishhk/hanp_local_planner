@@ -35,6 +35,7 @@
 #define D_LOW 0.7 // meters, minimum distance for compatibility measure
 #define D_HIGH 10.0 // meters, maximum distance for compatibility measure
 #define BETA 1.57 // meters, angle from robot front to discard human for collision in comaptibility calculations
+#define MIN_SCALE 0.05 // minimum scaling of velocities that is always allowed regardless if humans are too near
 #define PREDICT_TIME 2.0 // seconds, time for predicting human and robot position, before checking compatibility
 
 #define MESSAGE_THROTTLE_PERIOD 4.0 // seconds
@@ -62,24 +63,25 @@ namespace hanp_local_planner
     bool ContextCostFunction::prepare()
     {
         // set default parameters
-        setParams(ALPHA_MAX, D_LOW, D_HIGH, BETA, PREDICT_TIME, false);
+        setParams(ALPHA_MAX, D_LOW, D_HIGH, BETA, MIN_SCALE, PREDICT_TIME, false);
 
         return true;
     }
 
     void ContextCostFunction::setParams(double alpha_max, double d_low, double d_high, double beta,
-        double predict_time, bool publish_predicted_human_markers)
+        double min_scale, double predict_time, bool publish_predicted_human_markers)
     {
         alpha_max_ = alpha_max;
         d_low_ = d_low;
         d_high_ = d_high;
         beta_ = beta;
+        min_scale_ = min_scale;
         predict_time_ = predict_time;
         publish_predicted_human_markers_ = publish_predicted_human_markers;
 
         ROS_DEBUG_NAMED("context_cost_function", "context-cost function parameters set: "
-        "alpha_max=%f, d_low=%f, d_high=:%f, predict_time=%f",
-        alpha_max_, d_low_, d_high_, predict_time_);
+        "alpha_max=%f, d_low=%f, d_high=%f, beta=%f, min_scale=%f, predict_time=%f",
+        alpha_max_, d_low_, d_high_, beta_, min_scale_, predict_time_);
     }
 
     // abuse this function to give sclae with with the trajectory should be truncated
@@ -210,14 +212,14 @@ namespace hanp_local_planner
             // no need to check more when we have to stop
             if (point_index_max == 1)
             {
-                return 0.0;
+                return min_scale_;
             }
         }
 
         auto scaling = (double)(point_index_max - 1) / (double)(traj.getPointsSize() - 1);
-        ROS_DEBUG_NAMED("context_cost_function", "returning scale value of %f", scaling);
+        ROS_DEBUG_NAMED("context_cost_function", "returning scale value of %f", std::max(min_scale_, scaling));
 
-        return scaling;
+        return std::max(min_scale_, scaling);
     }
 
     double ContextCostFunction::getCompatabilty(double d_p, double alpha)
