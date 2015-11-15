@@ -863,4 +863,26 @@ namespace hanp_local_planner
         }
     }
 
+    void HANPLocalPlanner::publishDiagnostic(hanp_local_planner::DiagnosticType d_type, std::string d_msg)
+    {
+        spencer_diagnostics::Status lpStatus("/spencer/Navigation/HANPLocalPlanner");
+
+        switch(d_type)
+        {
+            case hanp_local_planner::DiagnosticType::INFO:
+                lpStatus.addOK(d_msg);
+                break;
+            case hanp_local_planner::DiagnosticType::WARN:
+                lpStatus.addWarning(d_msg);
+                break;
+            case hanp_local_planner::DiagnosticType::ERROR:
+                lpStatus.addError(d_msg);
+                break;
+            default:
+                lpStatus.addError("undefined diagnostic type");
+        }
+
+        lpStatus.publish();
+    }
+
 };

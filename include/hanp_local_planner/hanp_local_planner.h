@@ -71,6 +71,7 @@
 #include <base_local_planner/obstacle_cost_function.h>
 #include <base_local_planner/prefer_forward_cost_function.h>
 #include <base_local_planner/simple_scored_sampling_planner.h>
+#include <spencer_diagnostics/status.h>
 
 #include <hanp_local_planner/context_cost_function.h>
 
@@ -170,6 +171,8 @@ namespace hanp_local_planner
         hanp_local_planner::ContextCostFunction* context_cost_function_;
 
         std::vector<hanp_local_planner::FailureType> failures_;
+
+        void publishDiagnostic(hanp_local_planner::DiagnosticType d_type, std::string d_msg);
     };
 };
 #endif
