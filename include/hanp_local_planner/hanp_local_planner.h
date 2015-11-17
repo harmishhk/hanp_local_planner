@@ -173,6 +173,12 @@ namespace hanp_local_planner
         std::vector<hanp_local_planner::FailureType> failures_;
 
         void publishDiagnostic(hanp_local_planner::DiagnosticType d_type, std::string d_msg);
+
+        bool use_measured_vel_;
+        geometry_msgs::TwistStamped measured_vel_;
+        std::string measured_vel_topic_;
+        ros::Subscriber measured_vel_sub_;
+        void measuredVelCb(const geometry_msgs::TwistStamped& measured_vel);
     };
 };
 #endif

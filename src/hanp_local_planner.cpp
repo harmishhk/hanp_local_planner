@@ -38,6 +38,9 @@
 // parameters configurable at start
 #define PLANNING_FRAME "odom"
 #define HUMAN_SUB_TOPIC "humans"
+#define MEASURED_VEL_TOPIC "/spencer/control/measured_velocity"
+#define MESURED_VEL_QUEUE_SIZE 1
+#define USE_MEASURED_VEL true
 
 #include <hanp_local_planner/hanp_local_planner.h>
 
@@ -259,6 +262,11 @@ namespace hanp_local_planner
                 odom_helper_.setOdomTopic( odom_topic_ );
             }
 
+            private_nh.param("use_measured_vel", use_measured_vel_, USE_MEASURED_VEL);
+            private_nh.param("mesured_vel_topic", measured_vel_topic_, std::string(MEASURED_VEL_TOPIC));
+            measured_vel_sub_ = private_nh.subscribe(measured_vel_topic_, MESURED_VEL_QUEUE_SIZE,
+                &HANPLocalPlanner::measuredVelCb, this);
+
             initialized_ = true;
 
             dsrv_ = new dynamic_reconfigure::Server<HANPLocalPlannerConfig>(private_nh);
@@ -269,6 +277,12 @@ namespace hanp_local_planner
         {
             ROS_WARN("This planner has already been initialized, doing nothing.");
         }
+    }
+
+    void HANPLocalPlanner::measuredVelCb(const geometry_msgs::TwistStamped& measured_vel)
+    {
+        ROS_INFO_ONCE_NAMED("hanp_local_planner", "hanp_local_planner: measured_velocity received!");
+        measured_vel_ = measured_vel;
     }
 
     bool HANPLocalPlanner::setPlan(const std::vector<geometry_msgs::PoseStamped>& orig_global_plan)
@@ -379,6 +393,11 @@ namespace hanp_local_planner
 
         // calculate sim_time_current_ depending on current robot velocity
         auto robot_lin_vel = robot_vel.getOrigin().getX();
+        if(use_measured_vel_)
+        {
+            // get spencer mesured velocity
+            robot_lin_vel = measured_vel_.twist.linear.x;
+        }
         if(sim_time_steps_ > 1)
         {
             for(int i=0; i < sim_time_steps_; i++)
