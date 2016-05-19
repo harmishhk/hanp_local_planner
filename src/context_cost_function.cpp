@@ -28,7 +28,6 @@
  */
 
 // defining constants
-#define PREDICTD_HUMAN_PUB_TOPIC "predicted_human_poses"
 #define PREDICT_SERVICE_NAME "/human_pose_prediction/predict_2d_human_poses"
 
 #define ALPHA_MAX 2.09 // (2*M_PI/3) radians, angle between robot heading and inverse of human heading
@@ -55,8 +54,6 @@ namespace hanp_local_planner
         // initialize variables
         global_frame_ = global_frame;
         tf_ = tf;
-
-        predict_human_pub_ = private_nh.advertise<visualization_msgs::MarkerArray>(PREDICTD_HUMAN_PUB_TOPIC, 1);
     }
 
     bool ContextCostFunction::prepare()
@@ -96,6 +93,7 @@ namespace hanp_local_planner
         }
         predict_srv.request.predict_times = predict_times;
         predict_srv.request.type = hanp_prediction::HumanPosePredictRequest::VELOCITY_OBSTACLE;
+        predict_srv.request.publish_markers = publish_predicted_human_markers_;
         if(!predict_humans_client_.call(predict_srv))
         {
             ROS_DEBUG_THROTTLE_NAMED(MESSAGE_THROTTLE_PERIOD, "context_cost_function",
@@ -114,47 +112,6 @@ namespace hanp_local_planner
         }
         ROS_DEBUG_NAMED("context_cost_function", "transformied %d humans to %s frame",
             transformed_humans.size(), global_frame_.c_str());
-
-        if(publish_predicted_human_markers_)
-        {
-            // delete all previous markers
-            predicted_humans_markers_.markers.clear();
-            visualization_msgs::Marker delete_human;
-            delete_human.action = 3; // visualization_msgs::Marker::DELETEALL
-            predicted_humans_markers_.markers.push_back(delete_human);
-            predict_human_pub_.publish(predicted_humans_markers_);
-
-            // create new markers
-            int marker_id = 0;
-            predicted_humans_markers_.markers.clear();
-
-            for(auto transformed_human : transformed_humans)
-            {
-                for(auto transformed_human_pose : transformed_human.poses)
-                {
-                    visualization_msgs::Marker predicted_human;
-                    predicted_human.header.frame_id = global_frame_;
-                    predicted_human.header.stamp = ros::Time();
-                    predicted_human.id = marker_id++;
-                    predicted_human.type = visualization_msgs::Marker::CYLINDER;
-                    predicted_human.action = visualization_msgs::Marker::ADD;
-                    predicted_human.scale.x = transformed_human_pose.radius;
-                    predicted_human.scale.y = transformed_human_pose.radius;
-                    predicted_human.scale.z = 0.01;
-                    predicted_human.color.a = 1.0;
-                    predicted_human.color.r = 0.0;
-                    predicted_human.color.g = 0.0;
-                    predicted_human.color.b = 1.0;
-                    predicted_human.lifetime = ros::Duration(predict_time_);
-                    predicted_human.pose.position.x = transformed_human_pose.pose2d.x;
-                    predicted_human.pose.position.y = transformed_human_pose.pose2d.y;
-                    predicted_humans_markers_.markers.push_back(predicted_human);
-                }
-            }
-            predict_human_pub_.publish(predicted_humans_markers_);
-
-            ROS_DEBUG_NAMED("context_cost_function", "published predicted humans");
-        }
 
         // temporary variables for future robot pose, and compatibility
         double rx, ry, rtheta, d_p, alpha, compatibility;

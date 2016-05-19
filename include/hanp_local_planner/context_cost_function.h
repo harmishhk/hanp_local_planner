@@ -35,8 +35,6 @@
 #include <angles/angles.h>
 #include <hanp_prediction/HumanPosePredict.h>
 
-#include <visualization_msgs/MarkerArray.h>
-
 namespace hanp_local_planner {
 
     typedef std::array<double, 3> human_pose;
@@ -68,8 +66,6 @@ namespace hanp_local_planner {
         hanp_prediction::PredictedPoses transformHumanPoses(hanp_prediction::PredictedPoses&, std::string frame_id);
 
         bool publish_predicted_human_markers_ = false;
-        visualization_msgs::MarkerArray predicted_humans_markers_;
-        ros::Publisher predict_human_pub_;
     };
 }
 
