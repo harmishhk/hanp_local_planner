@@ -101,7 +101,7 @@ namespace hanp_local_planner
             return 1.0;
         }
 
-        ROS_DEBUG_NAMED("context_cost_function", "received %d predicted humans",
+        ROS_DEBUG_NAMED("context_cost_function", "received %lu predicted humans",
             predict_srv.response.predicted_humans.size());
 
         // transform humans
@@ -110,7 +110,7 @@ namespace hanp_local_planner
         {
             transformed_humans.push_back(transformHumanPoses(human, predict_srv.response.header.frame_id));
         }
-        ROS_DEBUG_NAMED("context_cost_function", "transformied %d humans to %s frame",
+        ROS_DEBUG_NAMED("context_cost_function", "transformied %lu humans to %s frame",
             transformed_humans.size(), global_frame_.c_str());
 
         // temporary variables for future robot pose, and compatibility
@@ -125,7 +125,7 @@ namespace hanp_local_planner
                 // get the future pose of the robot
                 traj.getPoint(point_index, rx, ry, rtheta);
                 auto future_human_pose = transformed_human.poses[point_index]; //TODO: check index validity
-                ROS_DEBUG_NAMED("context_cost_function", "selecting futhre human pose %d of %d",
+                ROS_DEBUG_NAMED("context_cost_function", "selecting futhre human pose %d of %lu",
                     point_index, transformed_human.poses.size());
 
                 // discard human behind the robot
@@ -133,7 +133,7 @@ namespace hanp_local_planner
                     rx - future_human_pose.pose2d.x)));
                 if (a_p < beta_)
                 {
-                    ROS_DEBUG_NAMED("context_cost_function", "discarding human (%d)"
+                    ROS_DEBUG_NAMED("context_cost_function", "discarding human (%lu)"
                         " future pose (%u) for compatibility calculations",
                         transformed_human.track_id, point_index);
                     continue;
@@ -218,7 +218,7 @@ namespace hanp_local_planner
                 {
                     // transform position
                     geometry_msgs::Pose human_transformed;
-                    tf::Pose human_pose(tf::Quaternion(predicted_pose.pose2d.theta, 0, 0),
+                    tf::Pose human_pose(tf::createQuaternionFromYaw(predicted_pose.pose2d.theta),
                         tf::Vector3(predicted_pose.pose2d.x, predicted_pose.pose2d.y, 0));
                     tf::poseTFToMsg(humans_to_global_transform * human_pose, human_transformed);
 

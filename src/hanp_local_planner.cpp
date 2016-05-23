@@ -638,7 +638,7 @@ namespace hanp_local_planner
         }
         std::vector<geometry_msgs::PoseStamped> remaining_global_plan(global_plan_.begin() + remove_index, global_plan_.end());
 
-        ROS_DEBUG_NAMED("hanp_local_planner", "hanp_local_planner: discarded first %d (from %d)"
+        ROS_DEBUG_NAMED("hanp_local_planner", "hanp_local_planner: discarded first %d (from %lu)"
             " points from global plan for path-distance costs", remove_index, global_plan_.size());
         path_costs_->setTargetPoses(remaining_global_plan);
 
