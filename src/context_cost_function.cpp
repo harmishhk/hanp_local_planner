@@ -108,7 +108,7 @@ namespace hanp_local_planner
         std::vector<hanp_prediction::PredictedPoses> transformed_humans;
         for (auto human : predict_srv.response.predicted_humans)
         {
-            transformed_humans.push_back(transformHumanPoses(human, predict_srv.response.header.frame_id));
+            transformed_humans.push_back(transformHumanPoses(human));
         }
         ROS_DEBUG_NAMED("context_cost_function", "transformied %lu humans to %s frame",
             transformed_humans.size(), global_frame_.c_str());
@@ -119,18 +119,23 @@ namespace hanp_local_planner
 
         for(auto transformed_human : transformed_humans)
         {
+            if (transformed_human.poses.size() == 0)
+            {
+                continue;
+            }
+
             unsigned int point_index = 0;
             do
             {
                 // get the future pose of the robot
                 traj.getPoint(point_index, rx, ry, rtheta);
-                auto future_human_pose = transformed_human.poses[point_index]; //TODO: check index validity
+                auto future_human_pose = transformed_human.poses[point_index].pose; //TODO: check index validity
                 ROS_DEBUG_NAMED("context_cost_function", "selecting futhre human pose %d of %lu",
                     point_index, transformed_human.poses.size());
 
                 // discard human behind the robot
-                auto a_p = fabs(angles::shortest_angular_distance(rtheta, atan2(ry - future_human_pose.pose2d.y,
-                    rx - future_human_pose.pose2d.x)));
+                auto a_p = fabs(angles::shortest_angular_distance(rtheta, atan2(ry - future_human_pose.pose.position.y,
+                    rx - future_human_pose.pose.position.x)));
                 if (a_p < beta_)
                 {
                     ROS_DEBUG_NAMED("context_cost_function", "discarding human (%lu)"
@@ -139,15 +144,15 @@ namespace hanp_local_planner
                     continue;
                 }
 
-                // calculate distance of robot to person
-                d_p = hypot(rx - future_human_pose.pose2d.x, ry - future_human_pose.pose2d.y)
-                    - future_human_pose.radius;
+                // calculate distance of robot to person, assuming ciruclar human (depending on highest covariance)
+                d_p = hypot(rx - future_human_pose.pose.position.x, ry - future_human_pose.pose.position.y)
+                    - std::max(future_human_pose.covariance[0], future_human_pose.covariance[7]) ;
                 ROS_DEBUG_NAMED("context_cost_function", "rx=%f, ry=%f, hx=%f, hy=%f, d_p=%f, a_p=%f",
-                    rx, ry, future_human_pose.pose2d.x, future_human_pose.pose2d.y, d_p, a_p);
+                    rx, ry, future_human_pose.pose.position.x, future_human_pose.pose.position.y, d_p, a_p);
                 alpha = fabs(angles::shortest_angular_distance(rtheta,
-                    angles::normalize_angle_positive(future_human_pose.pose2d.theta) - M_PI));
+                    angles::normalize_angle_positive(tf::getYaw(future_human_pose.pose.orientation)) - M_PI));
                 // ROS_DEBUG_NAMED("context_cost_function", "rtheta=%f, h_inv_theta=%f, alpha=%f",
-                // rtheta, angles::normalize_angle_positive(future_human_pose.pose2d.theta) - M_PI, alpha);
+                // rtheta, angles::normalize_angle_positive(tf::getYaw(future_human_pose.pose.orientation)) - M_PI, alpha);
 
                 // check compatibility
                 compatibility = getCompatabilty(d_p, alpha);
@@ -198,10 +203,12 @@ namespace hanp_local_planner
     }
 
     hanp_prediction::PredictedPoses ContextCostFunction::transformHumanPoses(
-        hanp_prediction::PredictedPoses& predicted_human, std::string frame_id)
+        hanp_prediction::PredictedPoses& predicted_human)
     {
-        if(global_frame_ != frame_id)
+        // assuming all predicted poses are in same frame
+        if(predicted_human.poses.size() > 0 && global_frame_ != predicted_human.poses[0].header.frame_id)
         {
+            auto& frame_id = predicted_human.poses[0].header.frame_id;
             hanp_prediction::PredictedPoses transformed_human;
 
             //transform human pose in global frame
@@ -217,22 +224,20 @@ namespace hanp_local_planner
                 for(auto predicted_pose : predicted_human.poses)
                 {
                     // transform position
-                    geometry_msgs::Pose human_transformed;
-                    tf::Pose human_pose(tf::createQuaternionFromYaw(predicted_pose.pose2d.theta),
-                        tf::Vector3(predicted_pose.pose2d.x, predicted_pose.pose2d.y, 0));
-                    tf::poseTFToMsg(humans_to_global_transform * human_pose, human_transformed);
+                    tf::Pose predicted_pose_tf;
+                    tf::poseMsgToTF(predicted_pose.pose.pose, predicted_pose_tf);
+                    geometry_msgs::Pose predicted_pose_transformed;
+                    tf::poseTFToMsg(humans_to_global_transform * predicted_pose_tf, predicted_pose_transformed);
 
-                    hanp_prediction::PredictedPose transformed_pose;
-                    transformed_pose.pose2d.x = human_transformed.position.x;
-                    transformed_pose.pose2d.y = human_transformed.position.y;
-                    transformed_pose.pose2d.theta = tf::getYaw(human_transformed.orientation);
-                    transformed_pose.radius = predicted_pose.radius;
+                    geometry_msgs::PoseWithCovarianceStamped transformed_pose;
+                    transformed_pose.pose.pose = predicted_pose_transformed;
+                    transformed_pose.pose.covariance = predicted_pose.pose.covariance;
                     transformed_human.poses.push_back(transformed_pose);
 
                     ROS_DEBUG_NAMED("context_cost_function", "transformed human pose"
                     " to %s frame, resulting pose: x=%f, y=%f theta=%f",
-                    global_frame_.c_str(), transformed_pose.pose2d.x,
-                    transformed_pose.pose2d.y, transformed_pose.pose2d.theta);
+                    global_frame_.c_str(), transformed_pose.pose.pose.position.x,
+                    transformed_pose.pose.pose.position.y, tf::getYaw(transformed_pose.pose.pose.orientation));
                 }
                 transformed_human.track_id = predicted_human.track_id;
             }

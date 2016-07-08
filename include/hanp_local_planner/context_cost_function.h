@@ -63,7 +63,7 @@ namespace hanp_local_planner {
 
         double getCompatabilty(double d_p, double alpha);
 
-        hanp_prediction::PredictedPoses transformHumanPoses(hanp_prediction::PredictedPoses&, std::string frame_id);
+        hanp_prediction::PredictedPoses transformHumanPoses(hanp_prediction::PredictedPoses&);
 
         bool publish_predicted_human_markers_ = false;
     };
