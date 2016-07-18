@@ -50,14 +50,14 @@ namespace hanp_local_planner {
         double scoreTrajectory(base_local_planner::Trajectory &traj);
 
         void setParams(double alpha_max, double d_low, double d_high, double beta,
-            double predict_time, bool publish_predicted_human_markers);
+            double min_scale, double predict_time, bool publish_predicted_human_markers);
 
     private:
         ros::ServiceClient predict_humans_client_;
 
         tf::TransformListener* tf_;
 
-        double alpha_max_, d_low_, d_high_, beta_;
+        double alpha_max_, d_low_, d_high_, beta_, min_scale_;
         double predict_time_;
         std::string global_frame_;
 
