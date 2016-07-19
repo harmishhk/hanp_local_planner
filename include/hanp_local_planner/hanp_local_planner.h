@@ -109,6 +109,8 @@ namespace hanp_local_planner
     private:
         bool initialized_;
         bool setup_;
+        std::stringstream calc_times_;
+        bool print_calc_times_ = false;
 
         void reconfigureCB(HANPLocalPlannerConfig &config, uint32_t level);
 

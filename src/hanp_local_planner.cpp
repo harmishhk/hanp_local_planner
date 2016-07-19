@@ -36,7 +36,8 @@
 *********************************************************************/
 
 // parameters configurable at start
-#define PLANNING_FRAME "odom"
+//#define PLANNING_FRAME "odom"
+#define ODOM_TOPIC "/odom"
 #define HUMAN_SUB_TOPIC "humans"
 
 #include <hanp_local_planner/hanp_local_planner.h>
@@ -157,7 +158,7 @@ namespace hanp_local_planner
         stop_rotate_reduce_factor_ = config.stop_rotate_reduce_factor;
     }
 
-    HANPLocalPlanner::HANPLocalPlanner() : initialized_(false), odom_helper_(PLANNING_FRAME), setup_(false) { }
+    HANPLocalPlanner::HANPLocalPlanner() : initialized_(false), odom_helper_(ODOM_TOPIC), setup_(false) { }
 
     void HANPLocalPlanner::initialize(std::string name, tf::TransformListener* tf, costmap_2d::Costmap2DROS* costmap_ros)
     {
@@ -216,15 +217,14 @@ namespace hanp_local_planner
             obstacle_costs_->setSumScores(sum_scores);
 
             private_nh.param("publish_cost_grid_pc", publish_cost_grid_pc_, false);
+            ROS_INFO("Will %spublish cost point-cloud", publish_cost_grid_pc_?"":"not ");
             map_viz_.initialize(name, planner_util_.getGlobalFrame(), boost::bind(&HANPLocalPlanner::getCellCosts, this, _1, _2, _3, _4, _5, _6));
 
-            std::string frame_id;
-            private_nh.param("global_frame_id", frame_id, std::string(PLANNING_FRAME));
-
             traj_cloud_ = new pcl::PointCloud<base_local_planner::MapGridCostPoint>;
-            traj_cloud_->header.frame_id = frame_id;
+            traj_cloud_->header.frame_id = costmap_ros_->getGlobalFrameID();
             traj_cloud_pub_.advertise(private_nh, "trajectory_cloud", 1);
             private_nh.param("publish_traj_pc", publish_traj_pc_, false);
+            ROS_INFO("Will %spublish trajectory point-cloud", publish_traj_pc_?"":"not ");
 
             std::vector<base_local_planner::TrajectoryCostFunction*> critics;
             critics.push_back(&oscillation_costs_);
@@ -242,10 +242,9 @@ namespace hanp_local_planner
 
             private_nh.param("cheat_factor", cheat_factor_, 1.0);
 
-            if( private_nh.getParam( "odom_topic", odom_topic_ ))
-            {
-                odom_helper_.setOdomTopic( odom_topic_ );
-            }
+            private_nh.param<std::string>("odom_topic", odom_topic_, ODOM_TOPIC);
+            odom_helper_.setOdomTopic( odom_topic_ );
+            ROS_INFO("Using odometry from topic: %s", odom_helper_.getOdomTopic().c_str());
 
             initialized_ = true;
 
@@ -352,6 +351,10 @@ namespace hanp_local_planner
 
    bool HANPLocalPlanner::hanpComputeVelocityCommands(tf::Stamped<tf::Pose> &global_pose, geometry_msgs::Twist& cmd_vel)
    {
+        calc_times_ << "\thanp times:\n";
+        auto start_time = ros::Time::now();
+        auto ss_time = start_time;
+
         if(! isInitialized())
         {
             ROS_ERROR("This planner has not been initialized, please call initialize() before using this planner");
@@ -362,6 +365,10 @@ namespace hanp_local_planner
         tf::Stamped<tf::Pose> robot_vel;
         odom_helper_.getRobotVel(robot_vel);
         //ROS_DEBUG("robot vel: x=%f, y=%f, w=%f", robot_vel.getOrigin().getX(), robot_vel.getOrigin().getY(), tf::getYaw(robot_vel.getRotation()));
+
+        auto now = ros::Time::now();
+        calc_times_ << "\t\trobot-vel get time:\t" << (now - ss_time) << " (" << (now - start_time) << ")" << "\n";
+        ss_time = now;
 
         // struct timeval start, end;
         // double start_t, end_t, t_diff;
@@ -409,6 +416,10 @@ namespace hanp_local_planner
             return false;
         }
 
+        now = ros::Time::now();
+        calc_times_ << "\t\tbest-path search time:\t" << (now - ss_time) << " (" << (now - start_time) << ")" << "\n";
+        ss_time = now;
+
         // check if trajectory need to be scaled down as per context-cost function
         auto trajectory_scale = context_cost_function_->scoreTrajectory(path);
         if(trajectory_scale < 1.0)
@@ -428,6 +439,10 @@ namespace hanp_local_planner
             ROS_DEBUG_NAMED("hanp_local_planner", "hanp local planner scaled the plan by %d %%", (int)(trajectory_scale * 100));
         }
 
+        now = ros::Time::now();
+        calc_times_ << "\t\ttraj-scaling time:\t" << (now - ss_time) << " (" << (now - start_time) << ")" << "\n";
+        ss_time = now;
+
         ROS_DEBUG_NAMED("hanp_local_planner", "A valid velocity command of (%.2f, %.2f, %.2f) was found for this cycle.",
             cmd_vel.linear.x, cmd_vel.linear.y, cmd_vel.angular.z);
 
@@ -445,11 +460,18 @@ namespace hanp_local_planner
         }
 
         publishLocalPlan(local_plan);
+
+        now = ros::Time::now();
+        calc_times_ << "\t\tpublish plan time:\t" << (now - ss_time) << " (" << (now - start_time) << ")" << "\n";
+
         return true;
     }
 
     bool HANPLocalPlanner::computeVelocityCommandsAccErrors(geometry_msgs::Twist& cmd_vel)
     {
+        calc_times_ << "\ncomputeVelocityCommands:\n";
+        auto start_time = ros::Time::now();
+        auto ss_time = start_time;
         // struct timeval start_e, end_f;
         // double start_e_t, end_f_t, se_diff;
         // gettimeofday(&start_e, NULL);
@@ -462,6 +484,9 @@ namespace hanp_local_planner
             return false;
         }
 
+        auto now = ros::Time::now();
+        calc_times_ << "\tpose getting time:\t" << (now - ss_time) << " (" << (now - start_time) << ")" << "\n";
+        ss_time = now;
         // gettimeofday(&end_f, NULL);
         // end_f_t = end_f.tv_sec + double(end_f.tv_usec) / 1e6;
         // se_diff = end_f_t - start_e_t;
@@ -481,6 +506,9 @@ namespace hanp_local_planner
         }
         ROS_DEBUG_NAMED("hanp_local_planner", "Received a transformed plan with %zu points.", transformed_plan.size());
 
+        now = ros::Time::now();
+        calc_times_ << "\ttransform plan time:\t" << (now - ss_time) << " (" << (now - start_time) << ")" << "\n";
+        ss_time = now;
         // gettimeofday(&end_f, NULL);
         // end_f_t = end_f.tv_sec + double(end_f.tv_usec) / 1e6;
         // se_diff = end_f_t - start_e_t;
@@ -488,11 +516,15 @@ namespace hanp_local_planner
 
         updatePlanAndLocalCosts(current_pose_, transformed_plan);
 
+        now = ros::Time::now();
+        calc_times_ << "\tplan+costs update time:\t" << (now - ss_time) << " (" << (now - start_time) << ")" << "\n";
+        ss_time = now;
         // gettimeofday(&end_f, NULL);
         // end_f_t = end_f.tv_sec + double(end_f.tv_usec) / 1e6;
         // se_diff = end_f_t - start_e_t;
         // ROS_INFO("computeVelocityCommands: until updatePlanAndLocalCosts time: %.9f", se_diff);
 
+        bool return_value;
         if (latchedStopRotateController_.isPositionReached(&planner_util_, current_pose_))
         {
             // gettimeofday(&end_f, NULL);
@@ -534,12 +566,14 @@ namespace hanp_local_planner
             publishGlobalPlan(transformed_plan);
             publishLocalPlan(local_plan);
 
+            now = ros::Time::now();
+            calc_times_ << "\trotate controller time: " << (now - ss_time) << " (" << (now - start_time) << ")" << "\n";
             // gettimeofday(&end_f, NULL);
             // end_f_t = end_f.tv_sec + double(end_f.tv_usec) / 1e6;
             // se_diff = end_f_t - start_e_t;
             // ROS_INFO("computeVelocityCommands: full time: %.9f", se_diff);
 
-            return local_plan_found;
+            return_value = local_plan_found;
         }
         else
         {
@@ -550,6 +584,9 @@ namespace hanp_local_planner
 
             bool isOk = hanpComputeVelocityCommands(current_pose_, cmd_vel);
 
+            now = ros::Time::now();
+            calc_times_ << "\thanp-calc time:\t" << (now - ss_time) << " (" << (now - start_time) << ")" << "\n";
+            ss_time = now;
             // gettimeofday(&end_f, NULL);
             // end_f_t = end_f.tv_sec + double(end_f.tv_usec) / 1e6;
             // se_diff = end_f_t - start_e_t;
@@ -565,13 +602,27 @@ namespace hanp_local_planner
                 publishGlobalPlan(empty_plan);
             }
 
+            now = ros::Time::now();
+            calc_times_ << "\tplan publishing time:\t" << (now - ss_time) << " (" << (now - start_time) << ")" << "\n";
             // gettimeofday(&end_f, NULL);
             // end_f_t = end_f.tv_sec + double(end_f.tv_usec) / 1e6;
             // se_diff = end_f_t - start_e_t;
             // ROS_INFO("computeVelocityCommands: full time: %.9f", se_diff);
 
-            return isOk;
+            return_value = isOk;
         }
+
+        if(print_calc_times_)
+        {
+            calc_times_ << "\n";
+            ROS_INFO_STREAM_COND((now - start_time).toSec() > 0.07, calc_times_.str());
+            calc_times_.str(std::string());
+        }
+        else
+        {
+            calc_times_.str(std::string());
+        }
+        return return_value;
     }
 
     bool HANPLocalPlanner::getCellCosts(int cx, int cy, float &path_cost, float &goal_cost, float &occ_cost, float &total_cost)
@@ -694,6 +745,10 @@ namespace hanp_local_planner
         tf::Stamped<tf::Pose> global_vel, tf::Stamped<tf::Pose>& drive_velocities,
         std::vector<geometry_msgs::Point> footprint_spec)
     {
+        calc_times_ << "\t\tfinding best path:\n";
+        auto start_time = ros::Time::now();
+        auto ss_time = start_time;
+
         obstacle_costs_->setFootprint(footprint_spec);
 
         boost::mutex::scoped_lock l(configuration_mutex_);
@@ -709,7 +764,15 @@ namespace hanp_local_planner
         result_traj_.cost_ = -7;
 
         std::vector<base_local_planner::Trajectory> all_explored;
+        auto now = ros::Time::now();
+        calc_times_ << "\t\t\tpreparation time:\t" << (now - ss_time) << " (" << (now - start_time) << ")" << "\n";
+        ss_time = now;
+
         scored_sampling_planner_.findBestTrajectory(result_traj_, &all_explored);
+
+        now = ros::Time::now();
+        calc_times_ << "\t\t\ttrajectory search time:\t" << (now - ss_time) << " (" << (now - start_time) << ")" << "\n";
+        ss_time = now;
 
         if(publish_traj_pc_)
         {
@@ -746,7 +809,15 @@ namespace hanp_local_planner
             map_viz_.publishCostCloud(planner_util_.getCostmap());
         }
 
+        now = ros::Time::now();
+        calc_times_ << "\t\t\tpublish cost-grid time:\t" << (now - ss_time) << " (" << (now - start_time) << ")" << "\n";
+        ss_time = now;
+
         oscillation_costs_.updateOscillationFlags(pos, &result_traj_, planner_util_.getCurrentLimits().min_trans_vel);
+
+        now = ros::Time::now();
+        calc_times_ << "\t\t\toscillation-flag time:\t" << (now - ss_time) << " (" << (now - start_time) << ")" << "\n";
+        ss_time = now;
 
         if (result_traj_.cost_ < 0)
         {
@@ -760,6 +831,8 @@ namespace hanp_local_planner
             matrix.setRotation(tf::createQuaternionFromYaw(result_traj_.thetav_));
             drive_velocities.setBasis(matrix);
         }
+        now = ros::Time::now();
+        calc_times_ << "\t\t\tvel-setting time:\t" << (now - ss_time) << " (" << (now - start_time) << ")" << "\n";
 
         return result_traj_;
     }

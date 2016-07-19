@@ -28,7 +28,7 @@
  */
 
 // defining constants
-#define PREDICT_SERVICE_NAME "/human_pose_prediction/predict_2d_human_poses"
+#define PREDICT_SERVICE_NAME "/human_pose_prediction/predict_human_poses"
 
 #define ALPHA_MAX 2.09 // (2*M_PI/3) radians, angle between robot heading and inverse of human heading
 #define D_LOW 0.7 // meters, minimum distance for compatibility measure
@@ -79,7 +79,10 @@ namespace hanp_local_planner
         ROS_DEBUG_NAMED("context_cost_function", "context-cost function parameters set: "
         "alpha_max=%f, d_low=%f, d_high=%f, beta=%f, min_scale=%f, predict_time=%f",
         alpha_max_, d_low_, d_high_, beta_, min_scale_, predict_time_);
-    }
+
+        ROS_INFO_NAMED("context_cost_function", "Will %spublish predicted human markers",
+        publish_predicted_human_markers_?"":"not ");
+     }
 
     // abuse this function to give sclae with with the trajectory should be truncated
     double ContextCostFunction::scoreTrajectory(base_local_planner::Trajectory &traj)
