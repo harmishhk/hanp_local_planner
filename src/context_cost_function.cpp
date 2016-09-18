@@ -29,6 +29,7 @@
 
 // defining constants
 #define PREDICT_SERVICE_NAME "/human_pose_prediction/predict_human_poses"
+#define PUBLISH_MARKERS_SRV_NAME "/human_pose_prediction/publish_prediction_markers"
 
 #define ALPHA_MAX 2.09 // (2*M_PI/3) radians, angle between robot heading and inverse of human heading
 #define D_LOW 0.7 // meters, minimum distance for compatibility measure
@@ -51,6 +52,7 @@ namespace hanp_local_planner
     {
         ros::NodeHandle private_nh("~/");
         predict_humans_client_ = private_nh.serviceClient<hanp_prediction::HumanPosePredict>(PREDICT_SERVICE_NAME);
+        publish_predicted_markers_client_ = private_nh.serviceClient<std_srvs::SetBool>(PUBLISH_MARKERS_SRV_NAME);
 
         // initialize variables
         global_frame_ = global_frame;
@@ -80,8 +82,18 @@ namespace hanp_local_planner
         "alpha_max=%f, d_low=%f, d_high=%f, beta=%f, min_scale=%f, predict_time=%f",
         alpha_max_, d_low_, d_high_, beta_, min_scale_, predict_time_);
 
-        ROS_INFO_NAMED("context_cost_function", "Will %spublish predicted human markers",
-        publish_predicted_human_markers_?"":"not ");
+        std_srvs::SetBool publish_predicted_markers_srv;
+        publish_predicted_markers_srv.request.data = publish_predicted_human_markers_;
+        if(!publish_predicted_markers_client_ && publish_predicted_markers_client_.call(publish_predicted_markers_srv))
+        {
+            ROS_WARN_NAMED("context_cost_function", "Failed to call %s service, is human prediction server running?",
+            PUBLISH_MARKERS_SRV_NAME);
+        }
+        else
+        {
+            ROS_INFO_NAMED("context_cost_function", "Will %spublish predicted human markers",
+            publish_predicted_human_markers_?"":"not ");
+        }
      }
 
     // abuse this function to give sclae with with the trajectory should be truncated
@@ -98,7 +110,6 @@ namespace hanp_local_planner
         }
         predict_srv.request.predict_times = predict_times;
         predict_srv.request.type = hanp_prediction::HumanPosePredictRequest::VELOCITY_OBSTACLE;
-        predict_srv.request.publish_markers = publish_predicted_human_markers_;
         if(!predict_humans_client_.call(predict_srv))
         {
             ROS_DEBUG_THROTTLE_NAMED(MESSAGE_THROTTLE_PERIOD, "context_cost_function",
@@ -107,11 +118,11 @@ namespace hanp_local_planner
         }
 
         ROS_DEBUG_NAMED("context_cost_function", "received %lu predicted humans",
-            predict_srv.response.predicted_humans.size());
+            predict_srv.response.predicted_humans_poses.size());
 
         // transform humans
         std::vector<hanp_prediction::PredictedPoses> transformed_humans;
-        for (auto human : predict_srv.response.predicted_humans)
+        for (auto human : predict_srv.response.predicted_humans_poses)
         {
             transformed_humans.push_back(transformHumanPoses(human));
         }
@@ -145,7 +156,7 @@ namespace hanp_local_planner
                 {
                     ROS_DEBUG_NAMED("context_cost_function", "discarding human (%lu)"
                         " future pose (%u) for compatibility calculations",
-                        transformed_human.track_id, point_index);
+                        transformed_human.id, point_index);
                     continue;
                 }
 
@@ -244,7 +255,7 @@ namespace hanp_local_planner
                     global_frame_.c_str(), transformed_pose.pose.pose.position.x,
                     transformed_pose.pose.pose.position.y, tf::getYaw(transformed_pose.pose.pose.orientation));
                 }
-                transformed_human.track_id = predicted_human.track_id;
+                transformed_human.id = predicted_human.id;
             }
             catch(const tf::ExtrapolationException &ex)
             {

@@ -34,6 +34,7 @@
 #include <tf/transform_listener.h>
 #include <angles/angles.h>
 #include <hanp_prediction/HumanPosePredict.h>
+#include <std_srvs/SetBool.h>
 
 namespace hanp_local_planner {
 
@@ -53,7 +54,7 @@ namespace hanp_local_planner {
             double min_scale, double predict_time, bool publish_predicted_human_markers);
 
     private:
-        ros::ServiceClient predict_humans_client_;
+        ros::ServiceClient predict_humans_client_, publish_predicted_markers_client_;
 
         tf::TransformListener* tf_;
 

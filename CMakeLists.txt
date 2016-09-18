@@ -27,6 +27,7 @@ find_package(catkin REQUIRED COMPONENTS
   pluginlib
   pcl_conversions
   roscpp
+  std_srvs
   tf
   visualization_msgs
 )
@@ -82,6 +83,7 @@ catkin_package(
     pluginlib
     pcl_conversions
     roscpp
+    std_srvs
     tf
     visualization_msgs
 #   DEPENDS
