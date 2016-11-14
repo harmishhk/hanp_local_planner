@@ -84,15 +84,15 @@ namespace hanp_local_planner
 
         std_srvs::SetBool publish_predicted_markers_srv;
         publish_predicted_markers_srv.request.data = publish_predicted_human_markers_;
-        if(!publish_predicted_markers_client_ && publish_predicted_markers_client_.call(publish_predicted_markers_srv))
+        if(publish_predicted_markers_client_ && publish_predicted_markers_client_.call(publish_predicted_markers_srv))
         {
-            ROS_WARN_NAMED("context_cost_function", "Failed to call %s service, is human prediction server running?",
-            PUBLISH_MARKERS_SRV_NAME);
+            ROS_INFO_NAMED("context_cost_function", "Perdiction will %spublish predicted human markers",
+            publish_predicted_human_markers_?"":"not ");
         }
         else
         {
-            ROS_INFO_NAMED("context_cost_function", "Will %spublish predicted human markers",
-            publish_predicted_human_markers_?"":"not ");
+            ROS_WARN_NAMED("context_cost_function", "Failed to call %s service, is human prediction server running?",
+            PUBLISH_MARKERS_SRV_NAME);
         }
      }
 
