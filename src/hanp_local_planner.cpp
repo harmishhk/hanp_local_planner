@@ -443,6 +443,8 @@ namespace hanp_local_planner
         calc_times_ << "\t\ttraj-scaling time:\t" << (now - ss_time) << " (" << (now - start_time) << ")" << "\n";
         ss_time = now;
 
+        //cmd_vel.linear.x = std::hypot(cmd_vel.linear.x,cmd_vel.linear.y);
+        cmd_vel.linear.y = 0.0;
         ROS_DEBUG_NAMED("hanp_local_planner", "A valid velocity command of (%.2f, %.2f, %.2f) was found for this cycle.",
             cmd_vel.linear.x, cmd_vel.linear.y, cmd_vel.angular.z);
 
